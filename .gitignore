@@ -6,3 +6,7 @@
 *.fatbin
 .devenv/
 .direnv/
+
+radix
+radix.c
+data.*

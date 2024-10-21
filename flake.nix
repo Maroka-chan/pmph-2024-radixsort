@@ -9,13 +9,22 @@
       systems = [ "x86_64-linux" "aarch64-darwin" ];
 
       perSystem = { config, self', inputs', pkgs, system, ... }: {
+        _module.args.pkgs = import inputs.nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+        };
+
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [ futhark gcc ];
+          packages = with pkgs; [
+            futhark
+            gcc
+            cudaPackages.cuda_cccl
+          ];
         };
       };
 
       flake = {
-
+        
       };
     };
 }

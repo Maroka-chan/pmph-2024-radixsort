@@ -1,11 +1,10 @@
 CUB=cub-1.8.0
 
-all: cub-sort
+all: bench
 
-cub-sort: sorting_test.cu helper.cu.h
-	nvcc -I$(CUB)/cub -o test-cub sorting_test.cu
-	./test-cub 100000000
+bench: sorting_test.cu helper.cu.h
+	nvcc -I$(CUB)/cub -o test-sort sorting_test.cu
+	./test-sort 10000000 0 
 
 clean:
-	rm -f test-cub
-
+	rm -f test-sort

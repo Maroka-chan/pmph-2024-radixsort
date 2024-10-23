@@ -10,7 +10,7 @@ bool validateZ(Z* A, uint32_t sizeAB) {
       // Sanity check to see that its not all zeros
       if (i < 100)
       {
-        printf("A[i]=%d\n", A[i]);
+        //printf("A[i]=%d\n", A[i]);
       }
       
       if (A[i-1] > A[i]){
@@ -24,7 +24,7 @@ bool validateZ(Z* A, uint32_t sizeAB) {
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         unsigned long int r = rand();
-        data[i] = r % H;
+        data[i] = r; //% 255;
     }
 }
 
@@ -92,14 +92,28 @@ void radixSortKeys(
 ) {
     const int B = 256;
     const int Q = 22;
-    const int lgH = 8;
+    const int lgH = 4;
+    const int H = pow(2, lgH);
 
     int numBlocks = 1;
     int threadsPerBlock = B;
 
+    uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+    uint32_t *histogram;
+    cudaSucceeded(cudaMalloc((void**) &histogram, numBlocks * H * sizeof(uint32_t)));
+
     // First Kernel ... results in a 2D array.
     // TODO determine input/output for each kernel
-    histogramKernel<<<numBlocks, threadsPerBlock>>>();
+    histogramKernel<<<numBlocks, threadsPerBlock>>>(d_keys_in, histogram, H, Q, B);
+
+    cudaMemcpy(histogram_res, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+
+    for (int i = 0; i < numBlocks * H; i++) {
+      if (i % H == 0) {printf("\n");}
+      printf("%i: %i ", i, histogram_res[i]);
+    }
 
     transposeKernel<<<numBlocks, threadsPerBlock>>>();
     flattenKernel<<<numBlocks, threadsPerBlock>>>();
@@ -107,6 +121,7 @@ void radixSortKeys(
     // Should have same configuration as the first Kernel
     scanKernel<<<numBlocks, threadsPerBlock>>>();
 
+    cudaFree(histogram);
 }
 
 
@@ -172,9 +187,25 @@ int main (int argc, char * argv[]) {
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
-    uint32_t* h_keys  = (uint32_t*) malloc(N*sizeof(uint32_t));
+    //uint32_t* h_keys  = (uint32_t*) malloc(N*sizeof(uint32_t));
     uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
-    randomInitNat(h_keys, N, N/10);
+    //randomInitNat(h_keys, N, N/10);
+
+    uint32_t h_keys[22] = {
+        16932, 18045, 19213, 20576, 21450, 22134, 23890,
+        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542, 
+        9001, 10234, 11875, 12340, 13564, 14789, 15829
+    };
+
+    /*
+        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542, 
+        9001, 10234, 11875, 12340, 13564, 14789, 15829, 
+        16932, 18045, 19213, 20576, 21450, 22134, 23890
+    */
+
+    //for (int i = 0; i < N; i++) {
+    //  printf("%i\n", h_keys[i]);
+    //}
 
     //Allocate and Initialize Device data
     uint32_t* d_keys_in;
@@ -205,7 +236,8 @@ int main (int argc, char * argv[]) {
 
     // Cleanup and closing
     cudaFree(d_keys_in); cudaFree(d_keys_out);
-    free(h_keys); free(h_keys_res);
+    //free(h_keys);
+    free(h_keys_res);
 
     return success ? 0 : 1;
 }

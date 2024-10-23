@@ -18,7 +18,6 @@
           packages = with pkgs; [
             futhark
             gcc
-            cudaPackages.cuda_cccl
           ];
         };
       };

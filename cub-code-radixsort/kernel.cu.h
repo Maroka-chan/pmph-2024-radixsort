@@ -19,7 +19,21 @@ __global__ void histogramKernel(const uint32_t *d_keys_in, uint32_t *histogram, 
   }
 }
 
-__global__ void transposeKernel() {
+template <int TILE> __global__ void transposeKernel(uint32_t *histogram, uint32_t *histogram_tr, int H, int numBlocks) {
+  __shared__ uint32_t shmem[TILE][TILE+1];
+  int x = blockIdx.x * TILE + threadIdx.x;
+  int y = blockIdx.y * TILE + threadIdx.y;
+  if (x < H && y < numBlocks){
+    shmem[threadIdx.y][threadIdx.x] = histogram[y * H + x];
+  }
+
+  __syncthreads();
+
+  x = blockIdx.y * TILE + threadIdx.x;
+  y = blockIdx.x * TILE + threadIdx.y;
+  if (x < numBlocks && y < H){
+    histogram_tr[y * numBlocks + x] = shmem[threadIdx.x][threadIdx.y];
+  }
 
 }
 
@@ -29,4 +43,5 @@ __global__ void flattenKernel() {
 
 __global__ void scanKernel() {
 
+  // for each of the H indexes, do an inclusive scan
 }

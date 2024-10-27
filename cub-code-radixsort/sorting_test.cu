@@ -24,8 +24,8 @@ bool validateZ(Z* A, uint32_t sizeAB) {
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         unsigned long int r = rand();
-        //data[i] = r; //% 255;
-	data[i] = 16932;
+        data[i] = r; //% 255;
+	    //data[i] = 16932;
     }
 }
 
@@ -110,17 +110,36 @@ void radixSortKeys(
     cudaMemcpy(histogram_res, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
-    for (int i = 0; i < numBlocks * H; i++) {
-      if (i%H==0) {printf("\n----------------\n"); }
-      printf("%5i: %5i ", i, histogram_res[i]);
+    //for (int i = 0; i < numBlocks * H; i++) {
+    //  if (i%H==0) {printf("\n----------------\n"); }
+    //  printf("%5i: %5i ", i, histogram_res[i]);
+    //}
+
+    //cudaMemcpy(h_keys_res, histogram_res, numBlocks*H*sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+
+    uint32_t *transpose_res;
+    cudaSucceeded(cudaMalloc((void**) &transpose_res, numBlocks * H * sizeof(uint32_t)));
+    const int TILE = 16;
+    int dimy = (numBlocks + TILE - 1) / TILE;
+    int dimx = (H + TILE - 1) / TILE;
+    dim3 block(TILE, TILE, 1), grid(dimx, dimy, 1);
+    transposeKernel<TILE><<<grid, block>>>(histogram, transpose_res, H, numBlocks);
+
+    uint32_t *transpose_res2 = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+    cudaMemcpy(transpose_res2, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+
+    for (int i = 0; i < H; i++) {
+      int index = i*2;
+      printf("%5i: %5i, %5i \n", i, transpose_res2[index], transpose_res2[index+1]);
     }
 
-
-    transposeKernel<<<numBlocks, threadsPerBlock>>>();
     flattenKernel<<<numBlocks, threadsPerBlock>>>();
     // I suppose this is what he refers to as the last kernel?
     // Should have same configuration as the first Kernel
-    scanKernel<<<numBlocks, threadsPerBlock>>>();
+    //scanKernel<<<numBlocks, threadsPerBlock>>>(transpose_res, H, numBlocks);
 
     cudaFree(histogram);
 }

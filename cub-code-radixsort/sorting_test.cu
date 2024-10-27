@@ -12,7 +12,7 @@ bool validateZ(Z* A, uint32_t sizeAB) {
       {
         //printf("A[i]=%d\n", A[i]);
       }
-      
+
       if (A[i-1] > A[i]){
         printf("INVALID RESULT for i:%d, (A[i-1]=%d > A[i]=%d)\n", i, A[i-1], A[i]);
         return false;
@@ -92,7 +92,7 @@ void radixSortKeys(
 ) {
     const int B = 256;
     const int Q = 22;
-    const int lgH = 4;
+    const int lgH = 8;
     const int H = pow(2, lgH);
 
     int numBlocks = 1;
@@ -117,7 +117,7 @@ void radixSortKeys(
 
     transposeKernel<<<numBlocks, threadsPerBlock>>>();
     flattenKernel<<<numBlocks, threadsPerBlock>>>();
-    // I suppose this is what he refers to as the last kernel? 
+    // I suppose this is what he refers to as the last kernel?
     // Should have same configuration as the first Kernel
     scanKernel<<<numBlocks, threadsPerBlock>>>();
 
@@ -146,6 +146,8 @@ double radixSortBench( uint32_t* data_keys_in
     }
     cudaCheckError();
 
+    return 1;
+
     { // one dry run
         radixSortKeys( tmp_sort_mem, tmp_sort_len
                                       , data_keys_in, data_keys_out
@@ -154,6 +156,7 @@ double radixSortBench( uint32_t* data_keys_in
         cudaDeviceSynchronize();
     }
     cudaCheckError();
+
 
     // timing
     double elapsed;
@@ -193,13 +196,13 @@ int main (int argc, char * argv[]) {
 
     uint32_t h_keys[22] = {
         16932, 18045, 19213, 20576, 21450, 22134, 23890,
-        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542, 
+        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542,
         9001, 10234, 11875, 12340, 13564, 14789, 15829
     };
 
     /*
-        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542, 
-        9001, 10234, 11875, 12340, 13564, 14789, 15829, 
+        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542,
+        9001, 10234, 11875, 12340, 13564, 14789, 15829,
         16932, 18045, 19213, 20576, 21450, 22134, 23890
     */
 
@@ -219,7 +222,7 @@ int main (int argc, char * argv[]) {
         elapsed = sortRedByKeyCUB( d_keys_in, d_keys_out, N );
     } else {
         elapsed = radixSortBench( d_keys_in, d_keys_out, N );
-    } 
+    }
 
     cudaMemcpy(h_keys_res, d_keys_out, N*sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();

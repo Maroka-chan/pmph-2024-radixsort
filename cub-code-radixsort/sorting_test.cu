@@ -24,7 +24,8 @@ bool validateZ(Z* A, uint32_t sizeAB) {
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         unsigned long int r = rand();
-        data[i] = r; //% 255;
+        //data[i] = r; //% 255;
+	data[i] = 16932;
     }
 }
 
@@ -95,7 +96,7 @@ void radixSortKeys(
     const int lgH = 8;
     const int H = pow(2, lgH);
 
-    int numBlocks = 1;
+    int numBlocks = 2;
     int threadsPerBlock = B;
 
     uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
@@ -104,16 +105,16 @@ void radixSortKeys(
 
     // First Kernel ... results in a 2D array.
     // TODO determine input/output for each kernel
-    histogramKernel<<<numBlocks, threadsPerBlock>>>(d_keys_in, histogram, H, Q, B);
+    histogramKernel<<<numBlocks, threadsPerBlock>>>(d_keys_in, histogram, H, Q, B, num_items);
 
     cudaMemcpy(histogram_res, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
-
     for (int i = 0; i < numBlocks * H; i++) {
-      if (i % H == 0) {printf("\n");}
-      printf("%i: %i ", i, histogram_res[i]);
+      if (i%H==0) {printf("\n----------------\n"); }
+      printf("%5i: %5i ", i, histogram_res[i]);
     }
+
 
     transposeKernel<<<numBlocks, threadsPerBlock>>>();
     flattenKernel<<<numBlocks, threadsPerBlock>>>();
@@ -190,15 +191,15 @@ int main (int argc, char * argv[]) {
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
-    //uint32_t* h_keys  = (uint32_t*) malloc(N*sizeof(uint32_t));
+    uint32_t* h_keys  = (uint32_t*) malloc(N*sizeof(uint32_t));
     uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
-    //randomInitNat(h_keys, N, N/10);
+    randomInitNat(h_keys, N, N/10);
 
-    uint32_t h_keys[22] = {
-        16932, 18045, 19213, 20576, 21450, 22134, 23890,
-        1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542,
-        9001, 10234, 11875, 12340, 13564, 14789, 15829
-    };
+    //uint32_t h_keys[23] = {
+    //    16932, 18045, 19213, 20576, 21450, 22134, 23890,
+    //    1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542,
+    //    9001, 10234, 11875, 12340, 13564, 14789, 15829,0
+    //};
 
     /*
         1032, 2457, 3001, 4096, 5123, 6287, 7391, 8542,

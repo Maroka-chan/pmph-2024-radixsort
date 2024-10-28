@@ -49,7 +49,7 @@ __global__ void scanKernel(uint32_t *histogram, int H, int numBlocks) {
 
 }
 
-
+/*
 __global__ void finalKernel(const uint32_t *d_keys_in, int Q, int B, uint32_t num_items, int lgH){
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -73,3 +73,4 @@ __global__ void finalKernel(const uint32_t *d_keys_in, int Q, int B, uint32_t nu
   // Step 3
 
 }
+*/

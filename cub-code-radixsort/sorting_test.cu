@@ -134,7 +134,7 @@ void radixSortKeys(
     printf("Printing transpose result:\n");
     for (int i = 0; i < H; i++) {
       int index = i*numBlocks;
-      printf("%5i: ", i);
+      printf("%3i: ", i);
       for (int j = 0; j < numBlocks; j++){
         printf("%5i, ", transpose_res2[index + j]);
       }
@@ -153,12 +153,25 @@ void radixSortKeys(
     printf("Printing scan result:\n");
     for (int i = 0; i < H; i++) {
       int index = i*numBlocks;
-      printf("%5i: ", i);
+      printf("%3i: ", i);
       for (int j = 0; j < numBlocks; j++){
         printf("%5i, ", scan_res[index + j]);
       }
       printf("\n");
     }
+
+    uint32_t *final_transpose_res;
+    cudaSucceeded(cudaMalloc((void**) &final_transpose_res, numBlocks * H * sizeof(uint32_t)));
+
+    transposeKernel<TILE><<<grid, block>>>(final_transpose_res, transpose_res, H, numBlocks);
+
+    for (int i = 0; i < 4; i++){
+
+        finalKernel<<<numBlocks, threadsPerBlock>>>();
+        cudaDeviceSynchronize();
+
+    }
+
 
 
     cudaFree(histogram);

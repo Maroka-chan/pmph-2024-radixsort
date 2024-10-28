@@ -91,12 +91,12 @@ void radixSortKeys(
     int begin_bit,
     int end_bit
 ) {
-    const int B = 256;
-    const int Q = 22;
-    const int lgH = 8;
-    const int H = pow(2, lgH);
+    const int B = 256; // CUDA block size
+    const int Q = 22; // elements processed by each thread
+    const int lgH = 8; // bits sorted at a time
+    const int H = pow(2, lgH); // Histogram size
 
-    int numBlocks = 2;
+    int numBlocks = 3;
     int threadsPerBlock = B;
 
     uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
@@ -131,15 +131,35 @@ void radixSortKeys(
     cudaDeviceSynchronize();
     cudaCheckError();
 
+    printf("Printing transpose result:\n");
     for (int i = 0; i < H; i++) {
-      int index = i*2;
-      printf("%5i: %5i, %5i \n", i, transpose_res2[index], transpose_res2[index+1]);
+      int index = i*numBlocks;
+      printf("%5i: ", i);
+      for (int j = 0; j < numBlocks; j++){
+        printf("%5i, ", transpose_res2[index + j]);
+      }
+      printf("\n");
+      //printf("%5i: %5i, %5i \n", i, transpose_res2[index], transpose_res2[index+1]);
     }
 
-    flattenKernel<<<numBlocks, threadsPerBlock>>>();
+    //flattenKernel<<<numBlocks, threadsPerBlock>>>();
     // I suppose this is what he refers to as the last kernel?
     // Should have same configuration as the first Kernel
-    //scanKernel<<<numBlocks, threadsPerBlock>>>(transpose_res, H, numBlocks);
+    scanKernel<<<numBlocks, threadsPerBlock>>>(transpose_res, H, numBlocks);
+
+    uint32_t *scan_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+    cudaMemcpy(scan_res, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+    printf("Printing scan result:\n");
+    for (int i = 0; i < H; i++) {
+      int index = i*numBlocks;
+      printf("%5i: ", i);
+      for (int j = 0; j < numBlocks; j++){
+        printf("%5i, ", scan_res[index + j]);
+      }
+      printf("\n");
+    }
+
 
     cudaFree(histogram);
 }

@@ -96,7 +96,7 @@ void radixSortKeys(
     const int lgH = 8; // bits sorted at a time
     const int H = pow(2, lgH); // Histogram size
 
-    int numBlocks = 3;
+    int numBlocks = 1;
     int threadsPerBlock = B;
 
     uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
@@ -167,7 +167,7 @@ void radixSortKeys(
 
     for (int i = 0; i < 4; i++){
 
-        finalKernel<<<numBlocks, threadsPerBlock>>>();
+        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, num_items, lgH, i);
         cudaDeviceSynchronize();
 
     }

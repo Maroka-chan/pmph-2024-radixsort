@@ -137,49 +137,76 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
   // Step 1
   __shared__ uint32_t shmem[Q*B];
   __shared__ uint32_t bitRes[B];
+  __shared__ uint32_t result[Q*B];
 
 
   uint32_t block_offset = blockIdx.x * Q * B;
   uint32_t thread_offset = threadIdx.x * Q;
 
+
+  // Copy from global to shared
   for (int i = 0; i < Q; i++) {
     if (gid * Q + i >= num_items) {return;}
     shmem[threadIdx.x * Q + i] = d_keys_in[block_offset + thread_offset + i];
   }
   __syncthreads();
 
+
+  uint32_t elements[Q];
+  // Copy from shared to register
+  for (int q = 0; q < Q; q++){
+    elements[q] = shmem[threadIdx.x * Q + i];
+  }
+
   // Step 2
   for (int i = 0; i < lgH; i++){
     uint32_t acc = 0;
     for (int j = 0; j < Q; j++){
 
-      uint32_t isUnset = isBitUnset(shmem[threadIdx.x * Q + j], i + outerLoopIndex * lgH);
+      uint32_t isUnset = isBitUnset(elements[j], i + outerLoopIndex * lgH);
       acc += isUnset;
 
     }
 
-
-
-
-
     bitRes[threadIdx.x] = acc;
-
-    if (threadIdx.x == 0 && i == 0 && outerLoopIndex == 0) {
-      for (int tmp = 0; tmp < B; tmp++){
-        printf("%i: %i \n", tmp, bitRes[tmp]);
-      }
-    }
 
     uint32_t res = scanIncBlock<Add<uint32_t>>(bitRes, threadIdx.x);
     __syncthreads();
     bitRes[threadIdx.x] = res;
     __syncthreads();
 
-    if (threadIdx.x == 0 && i == 0 && outerLoopIndex == 0) {
-      for (int tmp = 0; tmp < B; tmp++){
-        printf("%i: %i \n", tmp, bitRes[tmp]);
-      }
+    uint32_t split = bitRes[B-1]; // Should be equal to i in partition2 on block level
+
+
+    // Exclusive scan ?
+    if (threadIdx.x == 0) {acc = 0;}
+    else {acc = bitRes[threadIdx.x-1];}
+
+
+    uint32_t tmp[Q];
+
+
+    // We don't undersand anything beneath
+    for (int j = 0; j < Q; j++) {
+      uint32_t isUnset = isBitUnset(elements[j], i + outerLoopIndex * lgH);
+      acc += isUnset;
+      tmp[j] = acc;
     }
+    __syncthreads();
+    for (int j = 0; j < Q; j++) {
+      element = elements[j];
+      int pos;
+      uint32_t isUnset = isBitUnset(elements[j], i + outerLoopIndex * lgH);
+      if (isUnset == 1){
+        pos = tmp[j] - 1;
+      }
+      else {
+        pos = split + thread_offset + j - tmp[j];
+      }
+      result[pos] = element;
+
+    }
+
 
   }
 

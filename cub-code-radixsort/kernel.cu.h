@@ -332,5 +332,9 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
 
   // Step 3
 
+  __shared__ uint32_t originalHist[B*numBlocks];
+  __shared__ uint32_t scannedHist[B*numBlocks];
+
+
 }
 

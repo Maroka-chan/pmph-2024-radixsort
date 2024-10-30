@@ -202,61 +202,78 @@ template <int Q, int B> __device__ void partition2(uint32_t *arr, int lgH, int l
 */
 
 
-template <int Q, int B> __device__ void partition2(uint32_t *elements, int lgH, int outerLoopIndex, int bit, uint32_t *final_res){
+template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q]){
   __shared__ uint32_t isT[B];
   __shared__ uint32_t isF[B];
   uint32_t tfs[Q];
   uint32_t ffs[Q];
 
-
+  uint32_t isTrg [Q];
   uint32_t acc = 0;
   for (int q = 0; q < Q; q++){
-    uint32_t isUnset = isBitUnset(elements[q], bit + outerLoopIndex * lgH);
+    uint32_t isUnset = isBitUnset(vals[q], bit + outerLoopIndex * lgH);
     tfs[q] = isUnset;
-  }
-  {
-    isT[threadIdx.x] = tfs[Q-1];
-    __syncthreads();
-    uint32_t res = scanIncBlock<Add<uint32_t>>(isT, threadIdx.x);
-    isT[threadIdx.x] = res;
-    __syncthreads();
-  }
-
-
-  for (int q = 0; q < Q; q++){
-    uint32_t isUnset = isBitSet(elements[q], bit + outerLoopIndex * lgH);
-    ffs[q] = isUnset;
-  }
-  {
-    isF[threadIdx.x] = ffs[Q-1];
-    __syncthreads();
-    uint32_t res = scanIncBlock<Add<uint32_t>>(isF, threadIdx.x);
-    isF[threadIdx.x] = res;
-    __syncthreads();
-  }
-
-  uint32_t prefix;
-
-  if (threadIdx.x == 0) {prefix = 0;}
-  else {prefix = tfs[threadIdx.x-1];}
-
-  for (int q = 0; q < Q; q++){
-    tfs[q] = prefix + tfs[q];
-  }
-
-  uint32_t inds[Q];
-  uint32_t vals[Q];
-
-  for (int q = 0; q < Q; q++){
-
-    if (tfs[q] == 1){
-      inds[q] = isT[q]-1;
-    }
-    else {
-      inds[q] = isF[q]-1;
-    }
+    acc += isUnset;
+    isTrg[q] = acc;
   }
   __syncthreads();
+
+  isT[threadIdx.x] = isTrg[Q-1];
+  __syncthreads();
+  uint32_t res1 = scanIncBlock<Add<uint32_t>>(isT, threadIdx.x);
+  __syncthreads();
+  isT[threadIdx.x] = res1;
+  __syncthreads();
+  uint32_t thd_prefix = (threadIdx.x == 0) ? 0 : isT[threadIdx.x-1];
+  for (int q = 0; q < Q; q++){
+    isTrg[q] += thd_prefix;
+  }
+
+  uint32_t isFrg[Q];
+  acc = 0;
+  for (int q = 0; q < Q; q++){
+    uint32_t isSet = isBitSet(vals[q], bit + outerLoopIndex * lgH);
+    ffs[q] = isSet;
+    acc += isSet;
+    isFrg[q] = acc;
+  }
+
+  __syncthreads();
+
+  isF[threadIdx.x] = isFrg[Q-1];
+  __syncthreads();
+  uint32_t res2 = scanIncBlock<Add<uint32_t>>(isF, threadIdx.x);
+  __syncthreads();
+  isF[threadIdx.x] = res2;
+  __syncthreads();
+  thd_prefix = (threadIdx.x == 0) ? 0 : isF[threadIdx.x-1];
+  for (int q = 0; q < Q; q++){
+    isFrg[q] += thd_prefix;
+  }
+
+  //if (threadIdx.x == 0 && blockIdx.x == 0){
+  //  for (int j = 0; j < Q; j++){
+  //    printf("F: %i T: %i \n", isFrg[j], isTrg[j]);
+  //  }
+  //}
+
+  __syncthreads();
+
+
+
+  uint32_t inds[Q];
+  for (int q = 0; q < Q; q++){
+    if (tfs[q] == 1){
+      inds[q] = isTrg[q]-1;
+
+    }
+    else {
+      inds[q] = isFrg[q]-1;
+    }
+  }
+
+  __syncthreads();
+
 
 
   for (int q = 0; q < Q; q++){
@@ -273,7 +290,7 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
 
   // Step 1
   __shared__ uint32_t shmem[Q*B];
-  __shared__ uint32_t bitRes[B];
+  //__shared__ uint32_t bitRes[B];
   __shared__ uint32_t result[Q*B];
 
 
@@ -299,15 +316,15 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
 
   // Step 2
   for (int bit = 0; bit < lgH; bit++){
-    uint32_t acc = 0;
     //for (int j = 0; j < Q; j++){
 
-    uint32_t result[Q];
+    //uint32_t result[Q];
 
     partition2<Q,B>(elements, Q, outerLoopIndex, bit, result);
 
     for (int q = 0; q < Q; q++){
-      elements[q] = result[q];
+      //printf("%i \n", result[q]);
+      elements[q] = result[threadIdx.x * Q + q];
     }
   }
 

@@ -202,7 +202,7 @@ template <int Q, int B> __device__ void partition2(uint32_t *arr, int lgH, int l
 */
 
 
-template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B]){
+template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B], uint32_t num_items){
   __shared__ uint32_t isT[B];
   __shared__ uint32_t isF[B];
   uint32_t tfs[Q];
@@ -266,7 +266,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t inds[Q];
   for (int q = 0; q < Q; q++){
-    if (gid * Q + q >= 6) {break;}
+    if (gid * Q + q >= num_items) {break;}
     if (tfs[q] == 1){
       inds[q] = isTrg[q]-1;
 
@@ -280,7 +280,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
 
   for (int q = 0; q < Q; q++){
-    if (gid * Q + q >= 6) {break;}
+    if (gid * Q + q >= num_items) {break;}
     uint32_t ind = inds[q];
     uint32_t val = vals[q];
     final_res[ind] = val;
@@ -320,7 +320,7 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
   // Step 2
   for (int bit = 0; bit < lgH; bit++){
 
-    partition2<Q,B>(elements, Q, outerLoopIndex, bit, result);
+    partition2<Q,B>(elements, Q, outerLoopIndex, bit, result, num_items);
 
     for (int q = 0; q < Q; q++){
       elements[q] = result[threadIdx.x * Q + q];
@@ -349,20 +349,25 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
 template <int Q, int B> __global__ void partition2Test(){
 
   __shared__ uint32_t result[Q*B];
-  uint32_t elements[] = {0, 5 ,4 ,2 ,3 ,7 ,8, 10};
+  uint32_t elements[] = {250, 0, 5 ,4 ,2 ,3 ,7 ,8, 10};
+
+  uint32_t num_items = 9;
 
 
   for (int bit = 0; bit < 8; bit++){
-    partition2<Q,B>(elements, Q, 0, bit, result);
+    partition2<Q,B>(elements, Q, 0, bit, result, num_items);
+    __syncthreads();
     for (int q = 0; q < Q; q++){
       elements[q] = result[threadIdx.x * Q + q];
     }
+    __syncthreads();
     if (threadIdx.x == 0) {
-      for (int q = 0; q < Q+2; q++) {
-        printf("%i ", elements[q]);
+      for (int q = 0; q < Q+3; q++) {
+        printf("%u ", elements[q]);
       }
       printf("\n");
     }
+    __syncthreads();
   }
 
 

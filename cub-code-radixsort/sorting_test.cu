@@ -167,7 +167,7 @@ void radixSortKeys(
 
     for (int i = 0; i < 4; i++){
 
-        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i);
+        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
 
     }
@@ -239,6 +239,12 @@ int main (int argc, char * argv[]) {
         printf("Usage: %s <size-of-array> <baseline>(1 for baseline)\n", argv[0]);
         exit(1);
     }
+
+    partition2Test<6, 256><<<1, 256>>>();
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    return;
+
     const uint64_t N = atoi(argv[1]);
     const uint64_t BASELINE = atoi(argv[2]);
 

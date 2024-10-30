@@ -202,13 +202,13 @@ template <int Q, int B> __device__ void partition2(uint32_t *arr, int lgH, int l
 */
 
 
-template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q]){
+template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B]){
   __shared__ uint32_t isT[B];
   __shared__ uint32_t isF[B];
   uint32_t tfs[Q];
   uint32_t ffs[Q];
 
-  uint32_t isTrg [Q];
+  uint32_t isTrg[Q];
   uint32_t acc = 0;
   for (int q = 0; q < Q; q++){
     uint32_t isUnset = isBitUnset(vals[q], bit + outerLoopIndex * lgH);
@@ -217,6 +217,8 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
     isTrg[q] = acc;
   }
   __syncthreads();
+
+  uint32_t split = isTrg[Q-1];
 
   isT[threadIdx.x] = isTrg[Q-1];
   __syncthreads();
@@ -240,15 +242,16 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
   __syncthreads();
 
-  isF[threadIdx.x] = isFrg[Q-1];
+  isF[threadIdx.x] = isTrg[Q-1];
   __syncthreads();
   uint32_t res2 = scanIncBlock<Add<uint32_t>>(isF, threadIdx.x);
   __syncthreads();
   isF[threadIdx.x] = res2;
   __syncthreads();
-  thd_prefix = (threadIdx.x == 0) ? 0 : isF[threadIdx.x-1];
+
+  //thd_prefix = (threadIdx.x == 0) ? 0 : isT[threadIdx.x-1];
   for (int q = 0; q < Q; q++){
-    isFrg[q] += thd_prefix;
+    isFrg[q] += split;
   }
 
   //if (threadIdx.x == 0 && blockIdx.x == 0){
@@ -260,9 +263,10 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   __syncthreads();
 
 
-
+  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t inds[Q];
   for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= 6) {break;}
     if (tfs[q] == 1){
       inds[q] = isTrg[q]-1;
 
@@ -275,8 +279,8 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   __syncthreads();
 
 
-
   for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= 6) {break;}
     uint32_t ind = inds[q];
     uint32_t val = vals[q];
     final_res[ind] = val;
@@ -285,12 +289,11 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
 
 
-template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex){
+template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist){
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   // Step 1
   __shared__ uint32_t shmem[Q*B];
-  //__shared__ uint32_t bitRes[B];
   __shared__ uint32_t result[Q*B];
 
 
@@ -316,24 +319,51 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
 
   // Step 2
   for (int bit = 0; bit < lgH; bit++){
-    //for (int j = 0; j < Q; j++){
-
-    //uint32_t result[Q];
 
     partition2<Q,B>(elements, Q, outerLoopIndex, bit, result);
 
     for (int q = 0; q < Q; q++){
-      //printf("%i \n", result[q]);
       elements[q] = result[threadIdx.x * Q + q];
     }
   }
 
   __syncthreads();
 
-  // Step 3
+  // Step 3.1
 
-  __shared__ uint32_t originalHist[B*numBlocks];
-  __shared__ uint32_t scannedHist[B*numBlocks];
+  //__shared__ uint32_t originalHist[B];
+  //__shared__ uint32_t scannedHist[B];
+
+  //// Copy from global to shared
+  //originalHist[threadIdx.x] = origHist[threadIdx.x + blockIdx.x * blockDim.x];
+  //scannedHist[threadIdx.x ] = histogramArr[threadIdx.x + blockIdx.x * blockDim.x];
+
+
+  // Step 3.2
+
+
+  // Step 3.3
+
+}
+
+template <int Q, int B> __global__ void partition2Test(){
+
+  __shared__ uint32_t result[Q*B];
+  uint32_t elements[] = {0, 5 ,4 ,2 ,3 ,7 ,8, 10};
+
+
+  for (int bit = 0; bit < 8; bit++){
+    partition2<Q,B>(elements, Q, 0, bit, result);
+    for (int q = 0; q < Q; q++){
+      elements[q] = result[threadIdx.x * Q + q];
+    }
+    if (threadIdx.x == 0) {
+      for (int q = 0; q < Q+2; q++) {
+        printf("%i ", elements[q]);
+      }
+      printf("\n");
+    }
+  }
 
 
 }

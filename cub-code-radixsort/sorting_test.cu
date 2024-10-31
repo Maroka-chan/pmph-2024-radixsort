@@ -178,23 +178,30 @@ void radixSortKeys(
     //sharedMemSize = sharedMemSize + (2 * Q * B * sizeof (uint32_t));
 
 
-    uint32_t *tempOutput;
-    cudaSucceeded(cudaMalloc((void**) &tempOutput, numBlocks * H * sizeof(uint32_t)));
     for (int i = 0; i < 4; i++){
 
-        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram, tempOutput);
+        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
 
-        uint32_t *tempOutputhost = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
-        cudaMemcpy(tempOutputhost, tempOutput, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-
-        for (int j = 0; j < numBlocks * H; j++){
-            printf("%i: %i \n", j, tempOutputhost[j]);
-        }
-        return;
 
     }
 
+    uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
+    cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+
+    printf("\n\nFINAL RESULT: \n\n");
+    for(int i = 0; i < num_items; i++){
+        printf("%i, ", final_res[i]);
+    }
+
+
+    uint32_t tmp_input[num_items] = {163, 151, 162, 85, 83, 190, 241, 252, 249, 121, 107, 82, 20, 19, 233, 226, 45, 81, 142, 31, 86, 8};
+
+    printf("\n\n input: \n\n");
+    for(int i = 0; i < num_items; i++){
+        printf("%i, ", tmp_input[i]);
+    }
 
 
     cudaFree(histogram);

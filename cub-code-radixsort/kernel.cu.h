@@ -331,16 +331,18 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
 
   // Step 3.1
 
-  //__shared__ uint32_t originalHist[B];
-  //__shared__ uint32_t scannedHist[B];
-
-  //// Copy from global to shared
-  //originalHist[threadIdx.x] = origHist[threadIdx.x + blockIdx.x * blockDim.x];
-  //scannedHist[threadIdx.x ] = histogramArr[threadIdx.x + blockIdx.x * blockDim.x];
+  __shared__ uint32_t originalHist[B];
+  __shared__ uint32_t scannedHist[B];
+  __shared__ uint32_t originalScannedHist[B];
+  // Copy from global to shared
+  originalHist[threadIdx.x] = origHist[threadIdx.x + blockIdx.x * blockDim.x];
+  scannedHist[threadIdx.x] = histogramArr[threadIdx.x + blockIdx.x * blockDim.x];
 
 
   // Step 3.2
 
+  uint32_t scanRes = scanIncBlock<Add<uint32_t>>(originalHist, threadIdx.x);
+  originalScannedHist[threadIdx.x] = scanRes;
 
   // Step 3.3
 

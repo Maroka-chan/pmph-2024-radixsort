@@ -240,10 +240,11 @@ int main (int argc, char * argv[]) {
         exit(1);
     }
 
-    partition2Test<6, 256><<<1, 256>>>();
-    cudaDeviceSynchronize();
-    cudaCheckError();
-    return;
+
+    //partition2Test<6, 256><<<1, 256>>>();
+    //cudaDeviceSynchronize();
+    //cudaCheckError();
+    //return;
 
     const uint64_t N = atoi(argv[1]);
     const uint64_t BASELINE = atoi(argv[2]);

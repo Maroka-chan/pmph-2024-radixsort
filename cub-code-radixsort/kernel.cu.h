@@ -289,7 +289,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
 
 
-template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist){
+template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist, uint32_t *tempOutput){
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   // Step 1
@@ -369,24 +369,26 @@ template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_
   //scannedHist[threadIdx.x] = histogramArr[B * blockIdx.x + threadIdx.x];
   __syncthreads();
 
-  if (outerLoopIndex == 0){
-    if (originalHist[threadIdx.x] != origHist[B * blockIdx.x + threadIdx.x]){
-      printf("(L1) Something went wrong at index: %i", threadIdx.x);
-    }
-  }
+  //if (outerLoopIndex == 0){
+  //  if (originalHist[threadIdx.x] != origHist[threadIdx.x]){
+  //    printf("(L1) Something went wrong at index: %i \n", threadIdx.x);
+  //  }
+  //}
 
 
-  if (threadIdx.x == 0 && outerLoopIndex == 0){
-    printf("\nKernel: \n");
-    for (int b = 0; b < B; b++){
-      if (originalHist[b] != origHist[b]) {
-        printf("(L2) Something went wrong at index: %i \n", b);
-        //printf("%u: %u and %u \n", b, originalHist[b], origHist[b]);
-      }
-    }
-    printf("\n");
-  }
+  //if (threadIdx.x == 6 && outerLoopIndex == 0){
+  //  printf("\nKernel: \n");
+  //  for (int b = 0; b < B; b++){
+  //    if (originalHist[b] != origHist[b]) {
+  //      printf("(L2) Something went wrong at index: %i \n", b);
+  //      //printf("%u: %u and %u \n", b, originalHist[b], origHist[b]);
+  //    }
+  //  }
+  //  printf("\n");
+  //}
 
+  tempOutput[threadIdx.x] = originalHist[threadIdx.x];
+  return;
 
   // Step 3.2
 

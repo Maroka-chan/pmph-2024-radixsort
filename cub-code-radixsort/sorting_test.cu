@@ -177,10 +177,21 @@ void radixSortKeys(
     //uint32_t sharedMemSize = 3 * numBlocks * H * sizeof(uint32_t);
     //sharedMemSize = sharedMemSize + (2 * Q * B * sizeof (uint32_t));
 
+
+    uint32_t *tempOutput;
+    cudaSucceeded(cudaMalloc((void**) &tempOutput, numBlocks * H * sizeof(uint32_t)));
     for (int i = 0; i < 4; i++){
 
-        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
+        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram, tempOutput);
         cudaDeviceSynchronize();
+
+        uint32_t *tempOutputhost = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+        cudaMemcpy(tempOutputhost, tempOutput, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+        for (int j = 0; j < numBlocks * H; j++){
+            printf("%i: %i \n", j, tempOutputhost[j]);
+        }
+        return;
 
     }
 

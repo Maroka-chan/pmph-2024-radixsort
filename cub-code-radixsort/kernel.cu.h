@@ -340,30 +340,48 @@ template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_
   // Copy from global to shared
 
 
-    if (threadIdx.x == 0 && outerLoopIndex == 0){
-    printf("\nKernel before: \n");
-    for (int b = 0; b < B; b++){
-      if (origHist[b] > 0) {
-        printf("%u: %u, ", b, origHist[b]);
-      }
-    }
-    printf("\n");
-  }
+  //if (threadIdx.x == 0 && outerLoopIndex == 0){
+  //  printf("\nKernel before: \n");
+  //  for (int b = 0; b < B; b++){
+  //    if (origHist[b] > 0) {
+  //      printf("%u: %u, ", b, origHist[b]);
+  //    }
+  //  }
+  //  printf("\n");
+  //}
 
+  //if (outerLoopIndex == 0){
+//
+  //  if ( origHist[B * blockIdx.x + threadIdx.x] > 0){
+  //    printf("%i: %i,", threadIdx.x, origHist[B * blockIdx.x + threadIdx.x]);
+  //  }
+  //}
 
   __syncthreads();
+
+  //if (threadIdx.x == 0){
+  //  for (int b = 0; b < B; b++){
+  //    originalHist[b] = origHist[b];
+  //  }
+  //}
+
   originalHist[threadIdx.x] = origHist[B * blockIdx.x + threadIdx.x];
   //scannedHist[threadIdx.x] = histogramArr[B * blockIdx.x + threadIdx.x];
   __syncthreads();
 
-
+  if (outerLoopIndex == 0){
+    if (originalHist[threadIdx.x] != origHist[B * blockIdx.x + threadIdx.x]){
+      printf("(L1) Something went wrong at index: %i", threadIdx.x);
+    }
+  }
 
 
   if (threadIdx.x == 0 && outerLoopIndex == 0){
     printf("\nKernel: \n");
     for (int b = 0; b < B; b++){
-      if (originalHist[b] > 0) {
-        printf("%u: %u, ", b, originalHist[b]);
+      if (originalHist[b] != origHist[b]) {
+        printf("(L2) Something went wrong at index: %i \n", b);
+        //printf("%u: %u and %u \n", b, originalHist[b], origHist[b]);
       }
     }
     printf("\n");

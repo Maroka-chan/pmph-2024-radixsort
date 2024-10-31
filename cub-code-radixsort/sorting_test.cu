@@ -113,13 +113,13 @@ void radixSortKeys(
     cudaDeviceSynchronize();
     cudaCheckError();
 
-    printf("Original histogram: \n");
-    for (int i = 0; i < numBlocks * H; i++) {
-      if (i%H==0) {printf("\n----------------\n"); }
-      if (histogram_res[i] > 0){
-        printf("%5i: %5i ", i, histogram_res[i]);
-      }
-    }
+    //printf("Original histogram: \n");
+    //for (int i = 0; i < numBlocks * H; i++) {
+    //  if (i%H==0) {printf("\n----------------\n"); }
+    //  if (histogram_res[i] > 0){
+    //    printf("%5i: %5i ", i, histogram_res[i]);
+    //  }
+    //}
 
     //cudaMemcpy(h_keys_res, histogram_res, numBlocks*H*sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
@@ -173,6 +173,9 @@ void radixSortKeys(
     transposeKernel<TILE><<<grid, block>>>(final_transpose_res, transpose_res, H, numBlocks);
 
     cudaDeviceSynchronize();
+
+    //uint32_t sharedMemSize = 3 * numBlocks * H * sizeof(uint32_t);
+    //sharedMemSize = sharedMemSize + (2 * Q * B * sizeof (uint32_t));
 
     for (int i = 0; i < 4; i++){
 

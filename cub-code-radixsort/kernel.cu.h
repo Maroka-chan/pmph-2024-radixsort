@@ -289,7 +289,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
 
 
-template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist){
+template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist){
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   // Step 1
@@ -301,9 +301,11 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
   uint32_t thread_offset = threadIdx.x * Q;
 
 
+  __syncthreads();
+
   // Copy from global to shared
   for (int i = 0; i < Q; i++) {
-    if (gid * Q + i >= num_items) {return;}
+    if (gid * Q + i >= num_items) {break;}
     shmem[threadIdx.x * Q + i] = d_keys_in[block_offset + thread_offset + i];
   }
   __syncthreads();
@@ -312,11 +314,12 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
   uint32_t elements[Q];
   // Copy from shared to register
   for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= num_items) {break;}
     elements[q] = shmem[threadIdx.x * Q + q];
   }
 
 
-
+  __syncthreads();
   // Step 2
   for (int bit = 0; bit < lgH; bit++){
 
@@ -335,16 +338,61 @@ template <int Q, int B> __global__ void finalKernel(const uint32_t *d_keys_in, u
   __shared__ uint32_t scannedHist[B];
   __shared__ uint32_t originalScannedHist[B];
   // Copy from global to shared
-  originalHist[threadIdx.x] = origHist[threadIdx.x + blockIdx.x * blockDim.x];
-  scannedHist[threadIdx.x] = histogramArr[threadIdx.x + blockIdx.x * blockDim.x];
+
+
+    if (threadIdx.x == 0 && outerLoopIndex == 0){
+    printf("\nKernel before: \n");
+    for (int b = 0; b < B; b++){
+      if (origHist[b] > 0) {
+        printf("%u: %u, ", b, origHist[b]);
+      }
+    }
+    printf("\n");
+  }
+
+
+  __syncthreads();
+  originalHist[threadIdx.x] = origHist[B * blockIdx.x + threadIdx.x];
+  //scannedHist[threadIdx.x] = histogramArr[B * blockIdx.x + threadIdx.x];
+  __syncthreads();
+
+
+
+
+  if (threadIdx.x == 0 && outerLoopIndex == 0){
+    printf("\nKernel: \n");
+    for (int b = 0; b < B; b++){
+      if (originalHist[b] > 0) {
+        printf("%u: %u, ", b, originalHist[b]);
+      }
+    }
+    printf("\n");
+  }
 
 
   // Step 3.2
 
   uint32_t scanRes = scanIncBlock<Add<uint32_t>>(originalHist, threadIdx.x);
+  __syncthreads();
   originalScannedHist[threadIdx.x] = scanRes;
 
   // Step 3.3
+
+  __syncthreads();
+
+
+  for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= num_items) {break;}
+    uint32_t element = elements[q];
+    uint32_t bin = element >> (outerLoopIndex * 8);
+    bin = bin & 0xFF;
+    uint32_t globalOffset = 0;
+    if (bin != 0) {
+      globalOffset = originalScannedHist[bin-1];
+    }
+    //printf("%u \n", globalOffset);
+  //  d_keys_in[globalOffset] = element;
+  }
 
 }
 

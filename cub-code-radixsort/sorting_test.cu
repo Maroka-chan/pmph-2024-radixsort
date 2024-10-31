@@ -24,7 +24,8 @@ bool validateZ(Z* A, uint32_t sizeAB) {
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         unsigned long int r = rand();
-        data[i] = r; //% 255;
+        //printf("%u, ", r % 255);
+        data[i] = r % 255;
 	    //data[i] = 16932;
     }
 }
@@ -85,7 +86,7 @@ double sortRedByKeyCUB( uint32_t* data_keys_in
 void radixSortKeys(
     void* d_temp_storage,
     size_t& temp_storage_bytes,
-    const u_int32_t* d_keys_in,
+    u_int32_t* d_keys_in,
     u_int32_t* d_keys_out,
     u_int64_t num_items,
     int begin_bit,
@@ -96,12 +97,13 @@ void radixSortKeys(
     const int lgH = 8; // bits sorted at a time
     const int H = pow(2, lgH); // Histogram size
 
-    int numBlocks = 3;
+    int numBlocks = 1;
     int threadsPerBlock = B;
 
     uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
     uint32_t *histogram;
     cudaSucceeded(cudaMalloc((void**) &histogram, numBlocks * H * sizeof(uint32_t)));
+
 
     // First Kernel ... results in a 2D array.
     // TODO determine input/output for each kernel
@@ -110,10 +112,14 @@ void radixSortKeys(
     cudaMemcpy(histogram_res, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
-    //for (int i = 0; i < numBlocks * H; i++) {
-    //  if (i%H==0) {printf("\n----------------\n"); }
-    //  printf("%5i: %5i ", i, histogram_res[i]);
-    //}
+
+    printf("Original histogram: \n");
+    for (int i = 0; i < numBlocks * H; i++) {
+      if (i%H==0) {printf("\n----------------\n"); }
+      if (histogram_res[i] > 0){
+        printf("%5i: %5i ", i, histogram_res[i]);
+      }
+    }
 
     //cudaMemcpy(h_keys_res, histogram_res, numBlocks*H*sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
@@ -131,16 +137,15 @@ void radixSortKeys(
     cudaDeviceSynchronize();
     cudaCheckError();
 
-    printf("Printing transpose result:\n");
-    for (int i = 0; i < H; i++) {
-      int index = i*numBlocks;
-      printf("%3i: ", i);
-      for (int j = 0; j < numBlocks; j++){
-        printf("%5i, ", transpose_res2[index + j]);
-      }
-      printf("\n");
-      //printf("%5i: %5i, %5i \n", i, transpose_res2[index], transpose_res2[index+1]);
-    }
+    //printf("Printing transpose result:\n");
+    //for (int i = 0; i < H; i++) {
+    //  int index = i*numBlocks;
+    //  printf("%3i: ", i);
+    //  for (int j = 0; j < numBlocks; j++){
+    //    printf("%5i, ", transpose_res2[index + j]);
+    //  }
+    //  printf("\n");
+    //}
 
     //flattenKernel<<<numBlocks, threadsPerBlock>>>();
     // I suppose this is what he refers to as the last kernel?
@@ -150,20 +155,24 @@ void radixSortKeys(
     uint32_t *scan_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
     cudaMemcpy(scan_res, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-    printf("Printing scan result:\n");
-    for (int i = 0; i < H; i++) {
-      int index = i*numBlocks;
-      printf("%3i: ", i);
-      for (int j = 0; j < numBlocks; j++){
-        printf("%5i, ", scan_res[index + j]);
-      }
-      printf("\n");
-    }
+    //printf("Printing scan result:\n");
+    //for (int i = 0; i < H; i++) {
+    //  int index = i*numBlocks;
+    //  printf("%3i: ", i);
+    //  for (int j = 0; j < numBlocks; j++){
+    //    printf("%5i, ", scan_res[index + j]);
+    //  }
+    //  printf("\n");
+    //}
 
     uint32_t *final_transpose_res;
     cudaSucceeded(cudaMalloc((void**) &final_transpose_res, numBlocks * H * sizeof(uint32_t)));
 
+    cudaDeviceSynchronize();
+
     transposeKernel<TILE><<<grid, block>>>(final_transpose_res, transpose_res, H, numBlocks);
+
+    cudaDeviceSynchronize();
 
     for (int i = 0; i < 4; i++){
 

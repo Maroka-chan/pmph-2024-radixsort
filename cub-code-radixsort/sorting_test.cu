@@ -170,9 +170,19 @@ void radixSortKeys(
 
     cudaDeviceSynchronize();
 
-    transposeKernel<TILE><<<grid, block>>>(final_transpose_res, transpose_res, H, numBlocks);
+    transposeKernel<TILE><<<grid, block>>>(transpose_res, final_transpose_res, H, numBlocks);
 
     cudaDeviceSynchronize();
+
+
+    uint32_t *transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+    cudaMemcpy(transpose_res_host, final_transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+    //printf("Printing transpose result:\n");
+    //for (int i = 0; i < B * numBlocks; i++){
+    //    printf("%i, ", transpose_res_host[i]);
+    //}
+
 
     //uint32_t sharedMemSize = 3 * numBlocks * H * sizeof(uint32_t);
     //sharedMemSize = sharedMemSize + (2 * Q * B * sizeof (uint32_t));

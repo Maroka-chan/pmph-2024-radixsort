@@ -364,11 +364,26 @@ template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_
     uint32_t element = elements[q];
     uint32_t bin = element >> (outerLoopIndex * 8);
     bin = bin & 0xFF;
-    uint32_t globalOffset = scannedHist[bin];
-    d_keys_in[globalOffset] = element;
+    uint32_t globalOffset = 0;
+    uint32_t localOffset = 0;
+    if (bin != 0) {
+      printf("this is a value: %i\n", scannedHist[10]);
+      printf("this is a value: %i\n", scannedHist[10]);
+
+      globalOffset = originalScannedHist[bin-1];// + originalScannedHist[bin-1];
+      localOffset = scannedHist[bin-1];// + originalScannedHist[bin-1];
+    }
+    printf("globalOffset for q=%i: %i\n", q, globalOffset);
+    printf("localOffset for q=%i: %i\n", q, localOffset);
+
+    uint32_t global_index = globalOffset + localOffset + threadIdx.x;
+    printf("global_index: %i\n", global_index);
+    // assert(global_index < num_items);
+    // d_keys_in[global_index] = element;
   }
 
 }
+
 
 template <int Q, int B> __global__ void partition2Test(){
 

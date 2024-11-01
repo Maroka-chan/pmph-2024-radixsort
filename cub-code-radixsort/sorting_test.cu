@@ -190,10 +190,12 @@ void radixSortKeys(
 
     for (int i = 0; i < 4; i++){
 
+        printf("d_keys_in = %p\n", (void*) d_keys_in);
+        printf("final_transpose_res = %p\n", (void*) final_transpose_res);
+        printf("histogram = %p\n", (void*) histogram);
         finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
-
-
+        // cudaCheckError();
     }
 
     uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));

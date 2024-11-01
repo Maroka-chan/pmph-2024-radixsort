@@ -289,12 +289,15 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
 
 
-template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist){
+template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_t *d_keys_in, uint32_t *histogramArr, uint32_t num_items, int lgH, int outerLoopIndex, uint32_t *origHist){
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   // Step 1
   __shared__ uint32_t shmem[Q*B];
   __shared__ uint32_t result[Q*B];
+  __shared__ uint32_t histo_tst[B];
+  __shared__ uint32_t histo_org[B];
+  __shared__ uint32_t histo_scn_exc[B];
 
 
   uint32_t block_offset = blockIdx.x * Q * B;
@@ -334,53 +337,62 @@ template <int Q, int B> __global__ void finalKernel(uint32_t *d_keys_in, uint32_
 
   // Step 3.1
 
-  __shared__ uint32_t originalHist[B];
-  __shared__ uint32_t scannedHist[B];
-  __shared__ uint32_t originalScannedHist[B];
 
   __syncthreads();
 
   // Copy from global to shared
-  originalHist[threadIdx.x] = origHist[B * blockIdx.x + threadIdx.x];
-  scannedHist[threadIdx.x] = histogramArr[B * blockIdx.x + threadIdx.x];
+  histo_org[threadIdx.x] = origHist[gid];
+  histo_tst[threadIdx.x] = histogramArr[gid];
   __syncthreads();
 
-
-
-
+  // TODO: THIS SCAN IS BROKE FOR SOME REASON. INVALID ARGUMENT WHEN USING histo_SCN_EXC
   // Step 3.2
-
-  uint32_t scanRes = scanIncBlock<Add<uint32_t>>(originalHist, threadIdx.x);
+  uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_org, threadIdx.x);
   __syncthreads();
-  originalScannedHist[threadIdx.x] = scanRes;
-
+  histo_scn_exc[threadIdx.x] = scanRes;
+  __syncthreads();
+  histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_exc[threadIdx.x-1];
+  __syncthreads();
 
   // Step 3.3
 
   __syncthreads();
-
-  for (int q = 0; q < Q; q++){
+  for(int q=0; q<Q; q++) {
     if (gid * Q + q >= num_items) {break;}
-    uint32_t element = elements[q];
-    uint32_t bin = element >> (outerLoopIndex * 8);
+    uint32_t elm = elements[q];
+    uint32_t bin = elm >> (outerLoopIndex * 8);
     bin = bin & 0xFF;
-    uint32_t globalOffset = 0;
-    uint32_t localOffset = 0;
-    if (bin != 0) {
-      printf("this is a value: %i\n", scannedHist[10]);
-      printf("this is a value: %i\n", scannedHist[10]);
-
-      globalOffset = originalScannedHist[bin-1];// + originalScannedHist[bin-1];
-      localOffset = scannedHist[bin-1];// + originalScannedHist[bin-1];
+    // printf("q: %i, gid: %i, This is bin: %i\n", q, gid, bin);
+    uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    uint32_t glb_pos = histo_tst[bin] - histo_scn_exc[bin] + loc_pos - histo_scn_exc[bin];
+    // printf("glb_pos: %i\n", glb_pos);
+    if(glb_pos < num_items) {
+      d_keys_in[glb_pos] = elm;
     }
-    printf("globalOffset for q=%i: %i\n", q, globalOffset);
-    printf("localOffset for q=%i: %i\n", q, localOffset);
-
-    uint32_t global_index = globalOffset + localOffset + threadIdx.x;
-    printf("global_index: %i\n", global_index);
-    // assert(global_index < num_items);
-    // d_keys_in[global_index] = element;
   }
+  // __syncthreads();
+  // for (int q = 0; q < Q; q++){
+  //   if (gid * Q + q >= num_items) {break;}
+  //   uint32_t element = elements[q];
+  //   uint32_t bin = element >> (outerLoopIndex * 8);
+  //   bin = bin & 0xFF;
+  //   uint32_t globalOffset = 0;
+  //   uint32_t localOffset = 0;
+  //   if (bin != 0) {
+  //     printf("this is a value: %i\n", scannedHist[10]);
+  //     printf("this is a value: %i\n", scannedHist[10]);
+
+  //     globalOffset = originalScannedHist[bin-1];// + originalScannedHist[bin-1];
+  //     localOffset = scannedHist[bin-1];// + originalScannedHist[bin-1];
+  //   }
+  //   printf("globalOffset for q=%i: %i\n", q, globalOffset);
+  //   printf("localOffset for q=%i: %i\n", q, localOffset);
+
+  //   uint32_t global_index = globalOffset + localOffset + threadIdx.x;
+  //   printf("global_index: %i\n", global_index);
+  //   // assert(global_index < num_items);
+  //   // d_keys_in[global_index] = element;
+  // }
 
 }
 

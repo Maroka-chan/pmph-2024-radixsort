@@ -298,6 +298,10 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
   __shared__ uint32_t histo_tst[B];
   __shared__ uint32_t histo_org[B];
   __shared__ uint32_t histo_scn_exc[B];
+  __shared__ uint32_t histo_scn_inc[B];
+
+  int tid = threadIdx.x;
+
 
 
   uint32_t block_offset = blockIdx.x * Q * B;
@@ -333,39 +337,55 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     }
   }
 
+  histo_tst[tid] = 0;
+  histo_org[tid] = 0;
+  histo_scn_exc[tid] = 0;
+  histo_scn_inc[tid] = 0;
+
   __syncthreads();
 
   // Step 3.1
 
-
-  __syncthreads();
-
   // Copy from global to shared
+  //printf("thread: %u, gid: %u, origHist: %u\n", threadIdx.x, gid, origHist[gid]);
   histo_org[threadIdx.x] = origHist[gid];
   histo_tst[threadIdx.x] = histogramArr[gid];
+
   __syncthreads();
 
-  // TODO: THIS SCAN IS BROKE FOR SOME REASON. INVALID ARGUMENT WHEN USING histo_SCN_EXC
+
+  //printf("histo_org[%u]: %u origHist[%u]: %u\n", threadIdx.x, histo_org[threadIdx.x], gid, origHist[gid]);
+
   // Step 3.2
   uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_org, threadIdx.x);
   __syncthreads();
-  histo_scn_exc[threadIdx.x] = scanRes;
+  histo_scn_inc[threadIdx.x] = scanRes;
   __syncthreads();
-  histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_exc[threadIdx.x-1];
+  histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_inc[threadIdx.x-1];
   __syncthreads();
+
+  //printf("threadIdx: %u, histo_tst: %u, histo_scn_exc: %u\n", threadIdx.x, histo_tst[threadIdx.x], histo_scn_exc[threadIdx.x]);
 
   // Step 3.3
+  //for(int q=0; q<256; q++) {
+  //  if (threadIdx.x == 0) {
+  //    printf("histo_tst: %u histo_scn_exc: %u\n", histo_tst[q], histo_scn_exc[q]);
+  //  }
+  //}
 
-  __syncthreads();
   for(int q=0; q<Q; q++) {
     if (gid * Q + q >= num_items) {break;}
     uint32_t elm = elements[q];
     uint32_t bin = elm >> (outerLoopIndex * 8);
     bin = bin & 0xFF;
     // printf("q: %i, gid: %i, This is bin: %i\n", q, gid, bin);
-    uint32_t loc_pos = q*blockDim.x + threadIdx.x;
-    uint32_t glb_pos = histo_tst[bin] - histo_scn_exc[bin] + loc_pos - histo_scn_exc[bin];
-    // printf("glb_pos: %i\n", glb_pos);
+    //uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    uint32_t loc_pos = gid * Q + q;
+    uint32_t glb_pos = histo_tst[bin] - origHist[bin] + loc_pos - histo_scn_exc[bin];
+    printf("%u - %u + %u - %u = %u\n", histo_tst[bin], origHist[bin], loc_pos, histo_scn_exc[bin], glb_pos);
+    //printf("bin: %u\n", bin);
+    //printf("histo_tst: %u\n", histo_tst[bin]);
+    //printf("histo_scn_exc: %u\n", histo_scn_exc[bin]);
     if(glb_pos < num_items) {
       d_keys_in[glb_pos] = elm;
     }

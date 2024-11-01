@@ -93,7 +93,7 @@ void radixSortKeys(
     int end_bit
 ) {
     const int B = 256; // CUDA block size
-    const int Q = 22; // elements processed by each thread
+    const int Q = 10; // elements processed by each thread
     const int lgH = 8; // bits sorted at a time
     const int H = pow(2, lgH); // Histogram size
 
@@ -112,14 +112,6 @@ void radixSortKeys(
     cudaMemcpy(histogram_res, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
-
-    //printf("Original histogram: \n");
-    //for (int i = 0; i < numBlocks * H; i++) {
-    //  if (i%H==0) {printf("\n----------------\n"); }
-    //  if (histogram_res[i] > 0){
-    //    printf("%5i: %5i ", i, histogram_res[i]);
-    //  }
-    //}
 
     //cudaMemcpy(h_keys_res, histogram_res, numBlocks*H*sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
@@ -187,15 +179,21 @@ void radixSortKeys(
     //uint32_t sharedMemSize = 3 * numBlocks * H * sizeof(uint32_t);
     //sharedMemSize = sharedMemSize + (2 * Q * B * sizeof (uint32_t));
 
+    printf("Histogram res: \n");
+    for (int i = 0; i < numBlocks * H; i++) {
+      if (i%H==0) {printf("\n----------------\n"); }
+      if (histogram_res[i] > 0){
+        printf("%i: %u ", i, histogram_res[i]);
+      }
+    }
 
     for (int i = 0; i < 4; i++){
-
         printf("d_keys_in = %p\n", (void*) d_keys_in);
         printf("final_transpose_res = %p\n", (void*) final_transpose_res);
         printf("histogram = %p\n", (void*) histogram);
         finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
-        // cudaCheckError();
+        cudaCheckError();
     }
 
     uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
@@ -208,12 +206,12 @@ void radixSortKeys(
     }
 
 
-    uint32_t tmp_input[num_items] = {163, 151, 162, 85, 83, 190, 241, 252, 249, 121, 107, 82, 20, 19, 233, 226, 45, 81, 142, 31, 86, 8};
+    //uint32_t tmp_input[num_items] = {163, 151, 162, 85, 83, 190, 241, 252, 249, 121, 107, 82, 20, 19, 233, 226, 45, 81, 142, 31, 86, 8};
 
-    printf("\n\n input: \n\n");
-    for(int i = 0; i < num_items; i++){
-        printf("%i, ", tmp_input[i]);
-    }
+    //printf("\n\n input: \n\n");
+    //for(int i = 0; i < num_items; i++){
+    //    printf("%i, ", tmp_input[i]);
+    //}
 
 
     cudaFree(histogram);
@@ -292,9 +290,14 @@ int main (int argc, char * argv[]) {
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
-    uint32_t* h_keys  = (uint32_t*) malloc(N*sizeof(uint32_t));
+    uint32_t h_keys[10]  = {2, 3, 50, 1, 10, 3, 3, 78, 23, 100};
     uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
-    randomInitNat(h_keys, N, N/10);
+    //randomInitNat(h_keys, N, N/10);
+
+    for(int i = 0; i < N; i++) {
+      printf("%u ", h_keys[i]);
+    }
+    printf("\n");
 
     //uint32_t h_keys[23] = {
     //    16932, 18045, 19213, 20576, 21450, 22134, 23890,

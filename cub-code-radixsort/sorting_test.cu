@@ -3,8 +3,8 @@
 #include "helper.cu.h"
 #include "kernel.cu.h"
 
-template<class Z>
-bool validateZ(Z* A, uint32_t sizeAB) {
+// template<class Z>
+bool validateZ(u_int32_t* A, uint32_t sizeAB) {
     printf("Printing first 100 numbers: \n");
     for(uint32_t i = 1; i < sizeAB; i++) {
       // Sanity check to see that its not all zeros
@@ -23,9 +23,9 @@ bool validateZ(Z* A, uint32_t sizeAB) {
 
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
-        unsigned long int r = rand();
+        uint32_t r = rand();
         //printf("%u, ", r % 255);
-        data[i] = r % 255;
+        data[i] = r % 1000000;
 	    //data[i] = 16932;
     }
 }
@@ -194,16 +194,18 @@ void radixSortKeys(
         finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
         cudaCheckError();
+
+        uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
+        cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+
+        printf("\n\nResult after iteration i: %u: \n\n", i);
+        for(int i = 0; i < num_items; i++){
+            printf("%i, ", final_res[i]);
+        }
+        printf("\n");
     }
 
-    uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
-    cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-
-
-    printf("\n\nFINAL RESULT: \n\n");
-    for(int i = 0; i < num_items; i++){
-        printf("%i, ", final_res[i]);
-    }
 
 
     //uint32_t tmp_input[num_items] = {163, 151, 162, 85, 83, 190, 241, 252, 249, 121, 107, 82, 20, 19, 233, 226, 45, 81, 142, 31, 86, 8};
@@ -281,19 +283,21 @@ int main (int argc, char * argv[]) {
     }
 
 
-    //partition2Test<6, 256><<<1, 256>>>();
-    //cudaDeviceSynchronize();
-    //cudaCheckError();
-    //return;
+    // partition2Test<11, 256><<<1, 256>>>();
+    // cudaDeviceSynchronize();
+    // cudaCheckError();
+    // return;
 
-    const uint64_t N = atoi(argv[1]);
+    const uint32_t N = atoi(argv[1]);
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
-    //uint32_t *h_keys = (uint32_t*) malloc(N*sizeof(uint32_t));//{2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
-    uint32_t h_keys[11]  = {2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
+    uint32_t *h_keys = (uint32_t*) malloc(N*sizeof(uint32_t));//{2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
+    // uint32_t h_keys[11]  = {2, 3, 669, 429, 10, 800090, 667, 3, 800000, 302, 100};
+    // uint32_t h_keys[11]  = {800090, 2, 669, 429, 10,  3, 667, 3, 302, 100, 800000 };
+    // uint32_t h_keys[11]  = {800090, 2, 669, 429, 10,  3, 667, 3, 302, 100, 800000 };
     uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
-    //randomInitNat(h_keys, N, N/10);
+    randomInitNat(h_keys, N, N/10);
 
     for(int i = 0; i < N; i++) {
       printf("%u ", h_keys[i]);
@@ -330,7 +334,7 @@ int main (int argc, char * argv[]) {
         elapsed = radixSortBench( d_keys_in, d_keys_out, N );
     }
 
-    cudaMemcpy(h_keys_res, d_keys_out, N*sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_keys_res, d_keys_in, N*sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
 

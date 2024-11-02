@@ -4,8 +4,8 @@
 #include "kernel.cu.h"
 
 // template<class Z>
-bool validateZ(u_int32_t* A, uint32_t sizeAB) {
-    bool res = true;
+int validateZ(u_int32_t* A, uint32_t sizeAB) {
+    int wrongCounter = 0;
     printf("Printing first 100 numbers: \n");
     for(uint32_t i = 1; i < sizeAB; i++) {
       // Sanity check to see that its not all zeros
@@ -15,11 +15,11 @@ bool validateZ(u_int32_t* A, uint32_t sizeAB) {
       }
 
       if (A[i-1] > A[i]){
-        printf("INVALID RESULT for i:%d, (A[i-1]=%d > A[i]=%d)\n", i, A[i-1], A[i]);
-        res = false;
+        // printf("INVALID RESULT for i:%d, (A[i-1]=%d > A[i]=%d)\n", i, A[i-1], A[i]);
+        wrongCounter++;
       }
     }
-    return res;
+    return wrongCounter;
 }
 
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
@@ -205,11 +205,11 @@ void radixSortKeys(
             continue;
         }
 
-        printf("\n\nResult after iteration i: %u: \n\n", i);
-        for(int i = 0; i < num_items; i++){
-            printf("%i, ", final_res[i]);
-        }
-        printf("\n");
+        // printf("\n\nResult after iteration i: %u: \n\n", i);
+        // for(int i = 0; i < num_items; i++){
+        //     printf("%i, ", final_res[i]);
+        // }
+        // printf("\n");
     }
 
 
@@ -358,7 +358,9 @@ int main (int argc, char * argv[]) {
     cudaDeviceSynchronize();
     cudaCheckError();
 
-    bool success = validateZ(h_keys_res, N);
+    int wrongCounter = validateZ(h_keys_res, N);
+    printf("wrongCounter: %u\n", wrongCounter);
+    bool success = wrongCounter == 0; 
 
     if(BASELINE) {
         printf("Baseline (CUB) Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, success);

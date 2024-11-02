@@ -290,7 +290,7 @@ int main (int argc, char * argv[]) {
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
-    uint32_t h_keys[10]  = {2, 3, 50, 1, 10, 3, 3, 78, 23, 100};
+    uint32_t h_keys[11]  = {2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
     uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
     //randomInitNat(h_keys, N, N/10);
 

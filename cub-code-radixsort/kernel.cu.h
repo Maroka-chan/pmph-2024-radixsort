@@ -382,7 +382,7 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     //uint32_t loc_pos = q*blockDim.x + threadIdx.x;
     uint32_t loc_pos = gid * Q + q;
     uint32_t glb_pos = histo_tst[bin] - origHist[bin] + loc_pos - histo_scn_exc[bin];
-    printf("%u - %u + %u - %u = %u\n", histo_tst[bin], origHist[bin], loc_pos, histo_scn_exc[bin], glb_pos);
+    printf("bin: %u -> %u - %u + %u - %u = %u\n", bin, histo_tst[bin], origHist[bin], loc_pos, histo_scn_exc[bin], glb_pos);
     //printf("bin: %u\n", bin);
     //printf("histo_tst: %u\n", histo_tst[bin]);
     //printf("histo_scn_exc: %u\n", histo_scn_exc[bin]);

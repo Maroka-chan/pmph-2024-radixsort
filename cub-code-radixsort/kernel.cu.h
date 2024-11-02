@@ -203,6 +203,8 @@ template <int Q, int B> __device__ void partition2(uint32_t *arr, int lgH, int l
 
 
 template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B], uint32_t num_items){
+  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+
   __shared__ uint32_t isT[B];
   __shared__ uint32_t isF[B];
   uint32_t tfs[Q];
@@ -249,27 +251,17 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   isF[threadIdx.x] = res2;
   __syncthreads();
 
-  //thd_prefix = (threadIdx.x == 0) ? 0 : isT[threadIdx.x-1];
   for (int q = 0; q < Q; q++){
     isFrg[q] += split;
   }
 
-  //if (threadIdx.x == 0 && blockIdx.x == 0){
-  //  for (int j = 0; j < Q; j++){
-  //    printf("F: %i T: %i \n", isFrg[j], isTrg[j]);
-  //  }
-  //}
-
   __syncthreads();
 
-
-  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t inds[Q];
   for (int q = 0; q < Q; q++){
     if (gid * Q + q >= num_items) {break;}
     if (tfs[q] == 1){
       inds[q] = isTrg[q]-1;
-
     }
     else {
       inds[q] = isFrg[q]-1;
@@ -278,11 +270,14 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
   __syncthreads();
 
-
   for (int q = 0; q < Q; q++){
     if (gid * Q + q >= num_items) {break;}
     uint32_t ind = inds[q];
     uint32_t val = vals[q];
+    if (threadIdx.x == 1) {
+      printf("ind: %u, val: %u\n", ind, val);
+    }
+    //printf("thread: %u, ind %u: %u\n", threadIdx.x, q, inds[q]);
     final_res[ind] = val;
   }
 }
@@ -324,6 +319,8 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     if (gid * Q + q >= num_items) {break;}
     elements[q] = shmem[threadIdx.x * Q + q];
   }
+  __syncthreads();
+
 
 
   __syncthreads();
@@ -332,8 +329,31 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
 
     partition2<Q,B>(elements, Q, outerLoopIndex, bit, result, num_items);
 
+    if (threadIdx.x == 1) {
+      for (int i = 0; i < num_items; i++) {
+        //printf("thread: %i, result[%i]: %u\n", threadIdx.x, i, result[i]);
+        //printf("thread: %i, d_keys_in[%i]: %u\n", threadIdx.x, i, d_keys_in[i]);
+        //printf("thread: %i, shmem[10]: %u\n", threadIdx.x, shmem[10]);
+      }
+    }
+
     for (int q = 0; q < Q; q++){
+      if (gid * Q + q >= num_items) {break;}
       elements[q] = result[threadIdx.x * Q + q];
+
+      if (threadIdx.x == 1) {
+        printf("thread: %i, result[%i]: %u\n", threadIdx.x, threadIdx.x * Q + q, result[threadIdx.x * Q + q]);
+        printf("thread: %i, elements[%i]: %u\n", threadIdx.x, q, elements[q]);
+      }
+    }
+    __syncthreads();
+  }
+
+  if (threadIdx.x < 2) {
+    for (int i = 0; i < num_items; i++) {
+      //printf("thread: %i, elements[%i]: %u\n", threadIdx.x, i, elements[i]);
+      //printf("thread: %i, d_keys_in[%i]: %u\n", threadIdx.x, i, d_keys_in[i]);
+      //printf("thread: %i, shmem[10]: %u\n", threadIdx.x, shmem[10]);
     }
   }
 
@@ -364,6 +384,10 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
   histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_inc[threadIdx.x-1];
   __syncthreads();
 
+  histo_org[threadIdx.x] = origHist[gid];
+
+  __syncthreads();
+
   //printf("threadIdx: %u, histo_tst: %u, histo_scn_exc: %u\n", threadIdx.x, histo_tst[threadIdx.x], histo_scn_exc[threadIdx.x]);
 
   // Step 3.3
@@ -381,8 +405,9 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     // printf("q: %i, gid: %i, This is bin: %i\n", q, gid, bin);
     //uint32_t loc_pos = q*blockDim.x + threadIdx.x;
     uint32_t loc_pos = gid * Q + q;
-    uint32_t glb_pos = histo_tst[bin] - origHist[bin] + loc_pos - histo_scn_exc[bin];
-    printf("bin: %u -> %u - %u + %u - %u = %u\n", bin, histo_tst[bin], origHist[bin], loc_pos, histo_scn_exc[bin], glb_pos);
+    uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
+    //printf("elm: %u\n", elm);
+    //printf("bin: %u -> %u - %u + %u - %u = %u\n", bin, histo_tst[bin], histo_org[bin], loc_pos, histo_scn_exc[bin], glb_pos);
     //printf("bin: %u\n", bin);
     //printf("histo_tst: %u\n", histo_tst[bin]);
     //printf("histo_scn_exc: %u\n", histo_scn_exc[bin]);

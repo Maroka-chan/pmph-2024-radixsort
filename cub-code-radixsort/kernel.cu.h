@@ -204,15 +204,6 @@ template <int Q, int B> __device__ void partition2(uint32_t *arr, int lgH, int l
 
 template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B], uint32_t num_items){
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-
-  // if (threadIdx.x == 1 && bit == 0) {
-  //   for (int q = 0; q < Q; q++){
-  //     if (gid * Q + q >= num_items) {break;}
-  //     printf("PARTITION2 threadIdx.x: %u, register elm[%u]: %u\n", threadIdx.x, q, vals[q]);
-  //   }
-  // }
-  __syncthreads();
-
   __shared__ uint32_t isT[B];
   __shared__ uint32_t isF[B];
   uint32_t tfs[Q];
@@ -221,14 +212,17 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   uint32_t isTrg[Q];
   uint32_t acc = 0;
   for (int q = 0; q < Q; q++){
-    uint32_t isUnset = isBitUnset(vals[q], bit + outerLoopIndex * lgH);
+    uint32_t isUnset = 0;
+    if (!(gid * Q + q >= num_items)) {
+      isUnset = isBitUnset(vals[q], bit + outerLoopIndex * lgH);
+    }
     tfs[q] = isUnset;
     acc += isUnset;
     isTrg[q] = acc;
   }
   __syncthreads();
 
-  uint32_t split = isTrg[Q-1];
+  // uint32_t split = isTrg[Q-1];
 
   isT[threadIdx.x] = isTrg[Q-1];
   __syncthreads();
@@ -244,7 +238,10 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   uint32_t isFrg[Q];
   acc = 0;
   for (int q = 0; q < Q; q++){
-    uint32_t isSet = isBitSet(vals[q], bit + outerLoopIndex * lgH);
+    uint32_t isSet;
+    if (!(gid * Q + q >= num_items)) {
+      isSet = isBitSet(vals[q], bit + outerLoopIndex * lgH);
+    }
     ffs[q] = isSet;
     acc += isSet;
     isFrg[q] = acc;
@@ -252,15 +249,20 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
   __syncthreads();
 
-  isF[threadIdx.x] = isTrg[Q-1];
+  isF[threadIdx.x] = isFrg[Q-1];
   __syncthreads();
   uint32_t res2 = scanIncBlock<Add<uint32_t>>(isF, threadIdx.x);
   __syncthreads();
   isF[threadIdx.x] = res2;
   __syncthreads();
+  uint32_t thd_prefix_2 = (threadIdx.x == 0) ? 0 : isF[threadIdx.x-1];
+  uint32_t split = isT[B-1];
+  if (threadIdx.x == 0 || threadIdx.x == 1 ){
+    printf("split: %u, thd_prefix: %u, thd_prefix_2: %u, isTrg[Q-1]: %u, for threadIdx.x: %u\n", split, thd_prefix, thd_prefix_2, isTrg[Q-1], threadIdx.x);
+  }
 
   for (int q = 0; q < Q; q++){
-    isFrg[q] += split;
+    isFrg[q] += thd_prefix_2 + split;
   }
 
   __syncthreads();
@@ -270,9 +272,11 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
     if (gid * Q + q >= num_items) {break;}
     if (tfs[q] == 1){
       inds[q] = isTrg[q]-1;
+      printf("threadIdx.x: %u, inds[%u]=isTrg[%u]-1=%u\n", threadIdx.x, q, q, inds[q]);
     }
     else {
       inds[q] = isFrg[q]-1;
+      printf("threadIdx.x: %u, inds[%u]=isFrg[%u]-1=%u\n", threadIdx.x, q, q, inds[q]);
     }
   }
 
@@ -282,9 +286,9 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
     if (gid * Q + q >= num_items) {break;}
     uint32_t ind = inds[q];
     uint32_t val = vals[q];
-    if (threadIdx.x == 1) {
+    if (threadIdx.x == 0 || threadIdx.x == 1) {
     // printf("num items: %u, gid: %u, q: %u\n", num_items, gid, q);
-      // printf("threadIdx.x == %u, ind: %u, val: %u\n", threadIdx.x, ind, val);
+      printf("threadIdx.x == %u, ind: %u, val: %u\n", threadIdx.x, ind, val);
     }
     //printf("thread: %u, ind %u: %u\n", threadIdx.x, q, inds[q]);
     final_res[ind] = val;
@@ -431,24 +435,48 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
 }
 
 
-template <int Q, int B> __global__ void partition2Test(){
+template <int Q, int B, int lgH> __global__ void partition2Test(){
+  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   __shared__ uint32_t result[Q*B];
-  uint32_t elements[] = {250, 0, 5 ,4 ,2 ,3 ,7 ,8, 10};
+  const int N = 8;
+  uint32_t input[N] = {8,8,6,5,4,3,1,1};
+  // 8 = 0000 1000
+  // 7 = 0000 0111
+  // 6 = 0000 0110
+  // 5 = 0000 0101
+  // 4 = 0000 0100
+  // 3 = 0000 0011
+  // 2 = 0000 0010
+  // 1 = 0000 0001
 
-  uint32_t num_items = 9;
-
+  if (threadIdx.x == 0) {
+    printf("Input:\n");
+    for (int i = 0; i < N; i++)
+    {
+      printf("%i ", input[i]);
+    }
+    printf("\n");
+    printf("Results:\n");
+  }
+  __syncthreads();
+  uint32_t elements[Q];
+  for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= N) {break;}
+    elements[q] = input[threadIdx.x * Q + q];
+  }
+  __syncthreads();
 
   for (int bit = 0; bit < 8; bit++){
-    partition2<Q,B>(elements, Q, 0, bit, result, num_items);
+    partition2<Q,B>(elements, lgH, 0, bit, result, N);
     __syncthreads();
     for (int q = 0; q < Q; q++){
       elements[q] = result[threadIdx.x * Q + q];
     }
     __syncthreads();
     if (threadIdx.x == 0) {
-      for (int q = 0; q < Q+3; q++) {
-        printf("%u ", elements[q]);
+      for (int i = 0; i < N; i++) {
+        printf("%u ", result[i]);
       }
       printf("\n");
     }

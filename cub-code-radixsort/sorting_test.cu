@@ -283,10 +283,25 @@ int main (int argc, char * argv[]) {
     }
 
 
-    // partition2Test<11, 256><<<1, 256>>>();
-    // cudaDeviceSynchronize();
-    // cudaCheckError();
-    // return;
+    {
+        printf("Q=8\n");
+        const int Q = 8;
+        const int B = 256;
+        const int lgH = 8;
+        partition2Test<Q, B, lgH><<<1, B>>>();
+        cudaDeviceSynchronize();
+        cudaCheckError();
+    }
+    {
+        printf("Q=4\n");
+        const int Q = 4;
+        const int B = 256;
+        const int lgH = 8;
+        partition2Test<Q, B, lgH><<<1, B>>>();
+        cudaDeviceSynchronize();
+        cudaCheckError();
+    }
+    return 0;
 
     const uint32_t N = atoi(argv[1]);
     const uint64_t BASELINE = atoi(argv[2]);

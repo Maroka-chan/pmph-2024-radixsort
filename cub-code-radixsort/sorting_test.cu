@@ -5,6 +5,7 @@
 
 // template<class Z>
 bool validateZ(u_int32_t* A, uint32_t sizeAB) {
+    bool res = true;
     printf("Printing first 100 numbers: \n");
     for(uint32_t i = 1; i < sizeAB; i++) {
       // Sanity check to see that its not all zeros
@@ -15,17 +16,17 @@ bool validateZ(u_int32_t* A, uint32_t sizeAB) {
 
       if (A[i-1] > A[i]){
         printf("INVALID RESULT for i:%d, (A[i-1]=%d > A[i]=%d)\n", i, A[i-1], A[i]);
-        return false;
+        res = false;
       }
     }
-    return true;
+    return res;
 }
 
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         uint32_t r = rand();
         //printf("%u, ", r % 255);
-        data[i] = r % 1000000;
+        data[i] = r;
 	    //data[i] = 16932;
     }
 }
@@ -97,7 +98,8 @@ void radixSortKeys(
     const int lgH = 8; // bits sorted at a time
     const int H = pow(2, lgH); // Histogram size
 
-    int numBlocks = 1;
+    int numBlocks = 1 + num_items / (B * Q) ;
+    printf("numBlocks: %u\n", numBlocks);
     int threadsPerBlock = B;
 
     uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
@@ -179,18 +181,18 @@ void radixSortKeys(
     //uint32_t sharedMemSize = 3 * numBlocks * H * sizeof(uint32_t);
     //sharedMemSize = sharedMemSize + (2 * Q * B * sizeof (uint32_t));
 
-    printf("Histogram res: \n");
-    for (int i = 0; i < numBlocks * H; i++) {
-      if (i%H==0) {printf("\n----------------\n"); }
-      if (histogram_res[i] > 0){
-        printf("%i: %u ", i, histogram_res[i]);
-      }
-    }
+    // printf("Histogram res: \n");
+    // for (int i = 0; i < numBlocks * H; i++) {
+    //   if (i%H==0) {printf("\n----------------\n"); }
+    //   if (histogram_res[i] > 0){
+    //     printf("%i: %u ", i, histogram_res[i]);
+    //   }
+    // }
 
     for (int i = 0; i < 4; i++){
-        printf("d_keys_in = %p\n", (void*) d_keys_in);
-        printf("final_transpose_res = %p\n", (void*) final_transpose_res);
-        printf("histogram = %p\n", (void*) histogram);
+        // printf("d_keys_in = %p\n", (void*) d_keys_in);
+        // printf("final_transpose_res = %p\n", (void*) final_transpose_res);
+        // printf("histogram = %p\n", (void*) histogram);
         finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
         cudaCheckError();
@@ -198,6 +200,10 @@ void radixSortKeys(
         uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
         cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
         cudaDeviceSynchronize();
+
+        if (i != 3) {
+            continue;
+        }
 
         printf("\n\nResult after iteration i: %u: \n\n", i);
         for(int i = 0; i < num_items; i++){
@@ -283,25 +289,24 @@ int main (int argc, char * argv[]) {
     }
 
 
-    {
-        printf("Q=8\n");
-        const int Q = 8;
-        const int B = 256;
-        const int lgH = 8;
-        partition2Test<Q, B, lgH><<<1, B>>>();
-        cudaDeviceSynchronize();
-        cudaCheckError();
-    }
-    {
-        printf("Q=4\n");
-        const int Q = 4;
-        const int B = 256;
-        const int lgH = 8;
-        partition2Test<Q, B, lgH><<<1, B>>>();
-        cudaDeviceSynchronize();
-        cudaCheckError();
-    }
-    return 0;
+    // {
+    //     printf("Q=8\n");
+    //     const int Q = 8;
+    //     const int B = 256;
+    //     const int lgH = 8;
+    //     partition2Test<Q, B, lgH><<<1, B>>>();
+    //     cudaDeviceSynchronize();
+    //     cudaCheckError();
+    // }
+    // {
+    //     printf("Q=4\n");
+    //     const int Q = 4;
+    //     const int B = 256;
+    //     const int lgH = 8;
+    //     partition2Test<Q, B, lgH><<<1, B>>>();
+    //     cudaDeviceSynchronize();
+    //     cudaCheckError();
+    // }
 
     const uint32_t N = atoi(argv[1]);
     const uint64_t BASELINE = atoi(argv[2]);
@@ -314,10 +319,10 @@ int main (int argc, char * argv[]) {
     uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
     randomInitNat(h_keys, N, N/10);
 
-    for(int i = 0; i < N; i++) {
-      printf("%u ", h_keys[i]);
-    }
-    printf("\n");
+    // for(int i = 0; i < N; i++) {
+    //   printf("%u ", h_keys[i]);
+    // }
+    // printf("\n");
 
     //uint32_t h_keys[23] = {
     //    16932, 18045, 19213, 20576, 21450, 22134, 23890,

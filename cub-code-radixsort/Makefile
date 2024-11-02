@@ -4,7 +4,7 @@ all: bench
 
 bench: sorting_test.cu helper.cu.h
 	nvcc -I$(CUB)/cub -o test-sort sorting_test.cu
-	./test-sort 10 0
+	./test-sort 2500 0
 
 clean:
 	rm -f test-sort

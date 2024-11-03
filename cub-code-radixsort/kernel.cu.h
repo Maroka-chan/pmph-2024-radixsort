@@ -349,6 +349,7 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
   for (int bit = 0; bit < lgH; bit++){
 
     partition2<Q,B>(elements, lgH, outerLoopIndex, bit, result, num_items);
+    __syncthreads();
 
     if (threadIdx.x == 1) {
       for (int i = 0; i < num_items; i++) {

@@ -6,7 +6,7 @@
 // template<class Z>
 int validateZ(u_int32_t* A, uint32_t sizeAB) {
     int wrongCounter = 0;
-    printf("Printing first 100 numbers: \n");
+    // printf("Printing first 100 numbers: \n");
     for(uint32_t i = 1; i < sizeAB; i++) {
       // Sanity check to see that its not all zeros
       if (i < 100)
@@ -25,7 +25,7 @@ int validateZ(u_int32_t* A, uint32_t sizeAB) {
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         uint32_t r = rand();
-        printf("%u, ", r % 255);
+        // printf("%u, ", r % 255);
         data[i] = r % 255;
 	    //data[i] = 16932;
     }
@@ -100,7 +100,7 @@ void radixSortKeys(
     const int H = pow(2, lgH); // Histogram size
 
     int numBlocks = 1 + num_items / (B * Q) ;
-    printf("numBlocks: %u\n", numBlocks);
+    // printf("numBlocks: %u\n", numBlocks);
     int threadsPerBlock = B;
 
     uint32_t *histogram_res = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
@@ -190,23 +190,28 @@ void radixSortKeys(
     //   }
     // }
 
+    //  memcpy(dest, src, strlen(src) + 1);
+    
+    // cudaSucceeded(cudaMemcpy(d_keys_in, h_keys, N * sizeof(uint32_t), cudaMemcpyHostToDevice));
+    cudaMemcpy(d_keys_out, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToDevice);
+    cudaDeviceSynchronize();
     for (int i = 0; i < 4; i++){
         // printf("d_keys_in = %p\n", (void*) d_keys_in);
         // printf("final_transpose_res = %p\n", (void*) final_transpose_res);
         // printf("histogram = %p\n", (void*) histogram);
-        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_in, final_transpose_res, num_items, lgH, i, histogram);
+        finalKernel<Q, B><<<numBlocks, threadsPerBlock>>>(d_keys_out, final_transpose_res, num_items, lgH, i, histogram);
         cudaDeviceSynchronize();
         cudaCheckError();
 
-        uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
-        cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-        cudaDeviceSynchronize();
+        // uint32_t *final_res = (uint32_t*) malloc(num_items * sizeof(uint32_t));
+        // cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+        // cudaDeviceSynchronize();
 
-        printf("\n\nResult after iteration i: %u: \n\n", i);
-        for(int i = 0; i < num_items; i++){
-            printf("%i, ", final_res[i]);
-        }
-        printf("\n");
+        // printf("\n\nResult after iteration i: %u: \n\n", i);
+        // for(int i = 0; i < num_items; i++){
+        //     printf("%i, ", final_res[i]);
+        // }
+        // printf("\n");
     }
 
 
@@ -243,8 +248,6 @@ double radixSortBench( uint32_t* data_keys_in
         cudaMalloc(&tmp_sort_mem, tmp_sort_len);
     }
     cudaCheckError();
-
-    return 1;
 
     { // one dry run
         radixSortKeys( tmp_sort_mem, tmp_sort_len
@@ -351,7 +354,7 @@ int main (int argc, char * argv[]) {
         elapsed = radixSortBench( d_keys_in, d_keys_out, N );
     }
 
-    cudaMemcpy(h_keys_res, d_keys_in, N*sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_keys_res, d_keys_out, N*sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
 

@@ -25,8 +25,8 @@ int validateZ(u_int32_t* A, uint32_t sizeAB) {
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
         uint32_t r = rand();
-        //printf("%u, ", r % 255);
-        data[i] = r;
+        printf("%u, ", r % 255);
+        data[i] = r % 255;
 	    //data[i] = 16932;
     }
 }
@@ -93,8 +93,8 @@ void radixSortKeys(
     int begin_bit,
     int end_bit
 ) {
-    const int B = 256; // CUDA block size
-    const int Q = 10; // elements processed by each thread
+    const int B = 4; // CUDA block size
+    const int Q = 2; // elements processed by each thread
     const int lgH = 8; // bits sorted at a time
     const int H = pow(2, lgH); // Histogram size
 
@@ -201,15 +201,11 @@ void radixSortKeys(
         cudaMemcpy(final_res, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
         cudaDeviceSynchronize();
 
-        if (i != 3) {
-            continue;
+        printf("\n\nResult after iteration i: %u: \n\n", i);
+        for(int i = 0; i < num_items; i++){
+            printf("%i, ", final_res[i]);
         }
-
-        // printf("\n\nResult after iteration i: %u: \n\n", i);
-        // for(int i = 0; i < num_items; i++){
-        //     printf("%i, ", final_res[i]);
-        // }
-        // printf("\n");
+        printf("\n");
     }
 
 
@@ -360,7 +356,7 @@ int main (int argc, char * argv[]) {
 
     int wrongCounter = validateZ(h_keys_res, N);
     printf("wrongCounter: %u\n", wrongCounter);
-    bool success = wrongCounter == 0; 
+    bool success = wrongCounter == 0;
 
     if(BASELINE) {
         printf("Baseline (CUB) Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, success);

@@ -429,6 +429,9 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     //printf("histo_tst: %u\n", histo_tst[bin]);
     //printf("histo_scn_exc: %u\n", histo_scn_exc[bin]);
     if(glb_pos < num_items) {
+      if (blockIdx.x == 0 || blockIdx.x == 1){
+        printf("blockId: %u, ThreadIdx: %u, glb_pos: %u \n",blockIdx.x, threadIdx.x, glb_pos);
+      }
       d_keys_in[glb_pos] = elm;
     }
   }

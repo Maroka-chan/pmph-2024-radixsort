@@ -46,6 +46,7 @@ double sortRedByKeyCUB( uint32_t* data_keys_in
                                       , data_keys_in, data_keys_out
                                       , N,   beg_bit,  end_bit
                                       );
+        cudaDeviceSynchronize();
         cudaMalloc(&tmp_sort_mem, tmp_sort_len);
     }
     cudaCheckError();
@@ -93,8 +94,8 @@ void radixSortKeys(
     int begin_bit,
     int end_bit
 ) {
-    const int B = 4; // CUDA block size
-    const int Q = 2; // elements processed by each thread
+    const int B = 256; // CUDA block size
+    const int Q = 10; // elements processed by each thread
     const int lgH = 8; // bits sorted at a time
     const int H = pow(2, lgH); // Histogram size
 

@@ -5,7 +5,7 @@ template  <int B, int H> __global__ void histogramKernel(const uint32_t *d_keys_
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   __shared__ uint32_t histo_shared[H];
-  histo_shared[threadIdx.x] = histogram[gid];
+  histo_shared[threadIdx.x] = 0;
   __syncthreads();
 
   for (uint32_t i = 0; i < Q; i++) {

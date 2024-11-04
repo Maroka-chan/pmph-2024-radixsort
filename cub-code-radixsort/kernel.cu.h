@@ -420,8 +420,8 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     uint32_t elm = elements[q];
     uint8_t bin = (elm >> (outerLoopIndex * 8)) & 0xFF;
     // printf("q: %i, gid: %i, This is bin: %i\n", q, gid, bin);
-    //uint32_t loc_pos = q*blockDim.x + threadIdx.x;
-    uint32_t loc_pos = gid * Q + q;
+    uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    // uint32_t loc_pos = gid * Q + q;
     uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
     //printf("elm: %u\n", elm);
     // printf("threadIdx.x: %u, elm: %u, bin: %u -> %u - %u + %u - %u = %u\n", threadIdx.x, elm, bin, histo_tst[bin], histo_org[bin], loc_pos, histo_scn_exc[bin], glb_pos);
@@ -436,6 +436,107 @@ template <int Q, int B> __launch_bounds__(B) __global__ void finalKernel(uint32_
     }
   }
 
+}
+
+
+template <int Q, int B, int lgH> __global__ void sortTile(uint32_t* keys, int ith_pass, int N){
+  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ uint32_t result[Q*B];
+
+  uint32_t elements[Q];
+  for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= N) {break;}
+    elements[q] = keys[threadIdx.x * Q + q];
+  }
+
+  __syncthreads();
+  for (int bit = 0; bit < lgH; bit++){
+    partition2<Q,B>(elements, lgH, ith_pass, bit, result, N);
+    __syncthreads();
+    for (int q = 0; q < Q; q++){
+      elements[q] = result[threadIdx.x * Q + q];
+    }
+    __syncthreads();
+    // if (threadIdx.x == 0) {
+    //   for (int i = 0; i < N; i++) {
+    //     printf("%u ", result[i]);
+    //   }
+    //   printf("\n");
+    // }
+    // __syncthreads();
+  }
+
+  for(int q=0; q<Q; q++) {
+    if (gid * Q + q >= N) {break;}
+
+    uint32_t elm = elements[q];
+    keys[gid * Q + q] = elm;
+  }
+}
+
+template <int Q, int B, int lgH> __global__ void scatter(uint32_t* keys, uint32_t* histograms, uint32_t* histograms_tst, int ith_pass, int N){
+  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  __shared__ uint32_t shmem[Q*B];
+  __shared__ uint32_t histo_tst[B];
+  __shared__ uint32_t histo_org[B];
+  __shared__ uint32_t histo_scn_exc[B];
+  __shared__ uint32_t histo_scn_inc[B];
+
+  histo_org[threadIdx.x] = histograms[gid];
+  histo_tst[threadIdx.x] = histograms_tst[gid];
+  __syncthreads();
+
+  uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_org, threadIdx.x);
+  __syncthreads();
+  histo_scn_inc[threadIdx.x] = scanRes;
+  __syncthreads();
+  histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_inc[threadIdx.x-1];
+  __syncthreads();
+
+  // restore histo_org because scanIncBlock scans in-place
+  histo_org[threadIdx.x] = histograms[gid];
+  __syncthreads();
+
+  uint32_t block_offset = blockIdx.x * Q * B;
+  uint32_t thread_offset = threadIdx.x * Q;
+  // Copy from global to shared
+  for (int i = 0; i < Q; i++) {
+    if (gid * Q + i >= N) {break;}
+    shmem[threadIdx.x * Q + i] = keys[block_offset + thread_offset + i];
+  }
+  __syncthreads();
+
+  uint32_t elements[Q];
+  // Copy from shared to register
+  for (int q = 0; q < Q; q++){
+    if (gid * Q + q >= N) {break;}
+    elements[q] = shmem[threadIdx.x * Q + q];
+    // printf("threadIdx.x: %u, register elm[%u]: %u\n", threadIdx.x, q, elements[q]);
+  }
+  __syncthreads();
+
+  for(int q=0; q<Q; q++) {
+    if (gid * Q + q >= N) {break;}
+    uint32_t elm = elements[q];
+    uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF;
+    // printf("q: %i, gid: %i, This is bin: %i\n", q, gid, bin);
+    uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    // uint32_t loc_pos = gid * Q + q;
+    uint32_t glb_offs = histo_tst[bin] - histo_org[bin];
+    uint32_t glb_pos = glb_offs + loc_pos;
+    // uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
+    // glb_pos = glb_pos % N;
+    if(glb_pos < N) {
+      if (blockIdx.x == 0 || blockIdx.x == 1){
+        // printf("threadIdx.x: %u, elm: %u, bin: %u -> %u - %u + %u - %u = %u\n", threadIdx.x, elm, bin, histo_tst[bin], histo_org[bin], loc_pos, histo_scn_exc[bin], glb_pos);
+        // printf("blockId: %u, ThreadIdx: %u, glb_pos: %u \n",blockIdx.x, threadIdx.x, glb_pos);
+      }
+      keys[glb_pos] = elm;
+    } else {
+      // printf(">threadIdx.x: %u, elm: %u, bin: %u -> %u - %u + %u - %u = %u\n", threadIdx.x, elm, bin, histo_tst[bin], histo_org[bin], loc_pos, histo_scn_exc[bin], glb_pos);
+    }
+  }
 }
 
 

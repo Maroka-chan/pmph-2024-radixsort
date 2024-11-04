@@ -112,7 +112,7 @@ void radixSortKeys(
         cudaDeviceSynchronize();
 
         // Step 2.
-        histogramKernel<<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, H, Q, B, num_items);
+        histogramKernel<<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, H, Q, B, i, num_items);
         cudaDeviceSynchronize();
 
         // Step 3. transpose -> scan -> transpose

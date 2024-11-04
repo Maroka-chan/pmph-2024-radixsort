@@ -1,21 +1,19 @@
 #define lgWARP      5
 #define WARP        (1<<lgWARP)
 
-__global__ void histogramKernel(const uint32_t *d_keys_in, uint32_t *histogram, int H, int Q, int B, uint32_t num_items) {
+__global__ void histogramKernel(const uint32_t *d_keys_in, uint32_t *histogram, int H, int Q, int B, int ith_pass, uint32_t num_items) {
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   for (uint32_t i = 0; i < Q; i++) {
     if (gid * Q + i >= num_items) {return;}
-    for (uint32_t y = 0; y < 4; y++) {
-      uint32_t block_offset = blockIdx.x * Q * B;
-      uint32_t thread_offset = threadIdx.x * Q;
-      uint32_t pass = d_keys_in[block_offset + thread_offset + i] >> (y * 8);
-      pass = pass & 0xFF;
+    uint32_t block_offset = blockIdx.x * Q * B;
+    uint32_t thread_offset = threadIdx.x * Q;
+    uint32_t bin = d_keys_in[block_offset + thread_offset + i] >> (ith_pass * 8);
+    bin = bin & 0xFF;
 
 
-      uint32_t hist_block_offset = blockIdx.x * H;
-      atomicAdd(&histogram[hist_block_offset + pass], 1);
-    }
+    uint32_t hist_block_offset = blockIdx.x * H;
+    atomicAdd(&histogram[hist_block_offset + bin], 1);
   }
 }
 

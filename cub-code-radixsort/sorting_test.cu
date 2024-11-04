@@ -87,9 +87,9 @@ void radixSortKeys(
     int end_bit
 ) {
     const int B = 256; // CUDA block size
-    const int Q = 10; // elements processed by each thread
+    const int Q = 22; // elements processed by each thread
     const int lgH = 8; // bits sorted at a time
-    const int H = pow(2, lgH); // Histogram size
+    const int H = 256; // Histogram size
 
     int numBlocks = 1 + num_items / (B * Q) ;
     // printf("numBlocks: %u\n", numBlocks);
@@ -112,7 +112,7 @@ void radixSortKeys(
         cudaDeviceSynchronize();
 
         // Step 2.
-        histogramKernel<<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, H, Q, B, i, num_items);
+        histogramKernel<H, B><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, Q, i, num_items);
         cudaDeviceSynchronize();
 
         // Step 3. transpose -> scan -> transpose

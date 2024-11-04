@@ -1,20 +1,21 @@
 #define lgWARP      5
 #define WARP        (1<<lgWARP)
 
-__global__ void histogramKernel(const uint32_t *d_keys_in, uint32_t *histogram, int H, int Q, int B, int ith_pass, uint32_t num_items) {
+template  <int B, int H> __global__ void histogramKernel(const uint32_t *d_keys_in, uint32_t *histogram, int Q, int ith_pass, uint32_t num_items) {
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  __shared__ uint32_t histo_shared[H];
+  histo_shared[threadIdx.x] = histogram[gid];
+  __syncthreads();
 
   for (uint32_t i = 0; i < Q; i++) {
     if (gid * Q + i >= num_items) {return;}
-    uint32_t block_offset = blockIdx.x * Q * B;
-    uint32_t thread_offset = threadIdx.x * Q;
-    uint32_t bin = d_keys_in[block_offset + thread_offset + i] >> (ith_pass * 8);
+    uint32_t bin = histo_shared[threadIdx.x] >> (ith_pass * 8);
     bin = bin & 0xFF;
-
-
-    uint32_t hist_block_offset = blockIdx.x * H;
-    atomicAdd(&histogram[hist_block_offset + bin], 1);
+    atomicAdd(&histo_shared[bin], 1);
   }
+
+  histogram[gid] = histo_shared[threadIdx.x];
 }
 
 template <int TILE> __global__ void transposeKernel(uint32_t *histogram, uint32_t *histogram_tr, int H, int numBlocks) {

@@ -1,5 +1,7 @@
-# Futhark benchmark
+cd into cub-code-radixsort and run make
 
+or
 ```bash
-./bench.sh
+make -C ./cub-code-radixsort/
+
 ```

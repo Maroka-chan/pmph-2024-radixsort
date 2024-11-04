@@ -10,7 +10,7 @@ template  <int B, int H> __global__ void histogramKernel(const uint32_t *d_keys_
 
   for (uint32_t i = 0; i < Q; i++) {
     if (gid * Q + i >= num_items) {return;}
-    uint32_t bin = histo_shared[threadIdx.x] >> (ith_pass * 8);
+    uint32_t bin = d_keys_in[gid * Q + i] >> (ith_pass * 8);
     bin = bin & 0xFF;
     atomicAdd(&histo_shared[bin], 1);
   }

@@ -277,8 +277,7 @@ template <int Q, int B, int lgH> __global__ void scatter(uint32_t* keys, uint32_
     // TODO: Unsure about this
     uint32_t loc_pos = q*blockDim.x + threadIdx.x;
     // uint32_t loc_pos = gid * Q + q;
-    uint32_t glb_offs = histo_tst[bin] - histo_org[bin];
-    uint32_t glb_pos = glb_offs + loc_pos;
+    uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
     if(glb_pos < N) {
       keys[glb_pos] = elm;
     } 

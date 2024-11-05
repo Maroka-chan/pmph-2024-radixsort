@@ -91,7 +91,7 @@ void radixSortKeys(
     const int lgH = 8; // bits sorted at a time
     const int H = 256; // Histogram size
 
-    int numBlocks = 1 + num_items / (B * Q) ;
+    int numBlocks = (num_items + B * Q - 1) / (B * Q);
     // printf("numBlocks: %u\n", numBlocks);
     int threadsPerBlock = B;
 

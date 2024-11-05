@@ -2,20 +2,19 @@
 #define WARP        (1<<lgWARP)
 
 template  <int B, int H> __global__ void histogramKernel(const uint32_t *d_keys_in, uint32_t *histogram, int Q, int ith_pass, uint32_t num_items) {
-  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-
   __shared__ uint32_t histo_shared[H];
   histo_shared[threadIdx.x] = 0;
   __syncthreads();
 
   for (uint32_t i = 0; i < Q; i++) {
-    if (gid * Q + i >= num_items) {return;}
-    uint32_t bin = d_keys_in[gid * Q + i] >> (ith_pass * 8);
-    bin = bin & 0xFF;
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + i >= num_items) {return;}
+    uint8_t bin = (d_keys_in[(blockIdx.x * Q * B) + threadIdx.x * Q + i] >> (ith_pass * 8)) & 0xFF;
     atomicAdd(&histo_shared[bin], 1);
   }
 
-  histogram[gid] = histo_shared[threadIdx.x];
+  uint32_t hist_index = blockIdx.x * H + threadIdx.x;
+
+  histogram[hist_index] = histo_shared[threadIdx.x];
 }
 
 template <int TILE> __global__ void transposeKernel(uint32_t *histogram, uint32_t *histogram_tr, int H, int numBlocks) {
@@ -125,7 +124,6 @@ scanIncBlock(volatile typename OP::RedElTp* ptr, const unsigned int idx) {
 }
 
 template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B], uint32_t num_items){
-  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ uint32_t isT[B];
   __shared__ uint32_t isF[B];
   uint32_t tfs[Q];
@@ -135,7 +133,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   uint32_t acc = 0;
   for (int q = 0; q < Q; q++){
     uint32_t isUnset = 0;
-    if (!(gid * Q + q >= num_items)) {
+    if (!((blockIdx.x * Q * B) + threadIdx.x * Q + q >= num_items)) {
       isUnset = isBitUnset(vals[q], bit + outerLoopIndex * lgH);
     }
     tfs[q] = isUnset;
@@ -159,7 +157,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   acc = 0;
   for (int q = 0; q < Q; q++){
     uint32_t isSet;
-    if (!(gid * Q + q >= num_items)) {
+    if (!((blockIdx.x * Q * B) + threadIdx.x * Q + q >= num_items)) {
       isSet = isBitSet(vals[q], bit + outerLoopIndex * lgH);
     }
     ffs[q] = isSet;
@@ -185,7 +183,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
   uint32_t inds[Q];
   for (int q = 0; q < Q; q++){
-    if (gid * Q + q >= num_items) {break;}
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= num_items) {break;}
     if (tfs[q] == 1){
       inds[q] = isTrg[q]-1;
     }
@@ -196,7 +194,7 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 
 
   for (int q = 0; q < Q; q++){
-    if (gid * Q + q >= num_items) {break;}
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= num_items) {break;}
     uint32_t ind = inds[q];
     uint32_t val = vals[q];
     final_res[ind] = val;
@@ -204,13 +202,12 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
 }
 
 template <int Q, int B, int lgH> __global__ void sortTile(uint32_t* keys, int ith_pass, int N){
-  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ uint32_t result[Q*B];
 
   uint32_t elements[Q];
   for (int q = 0; q < Q; q++){
-    if (gid * Q + q >= N) {break;}
-    elements[q] = keys[threadIdx.x * Q + q];
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
+    elements[q] = keys[(blockIdx.x * Q * B) + threadIdx.x * Q + q];
   }
 
   for (int bit = 0; bit < lgH; bit++){
@@ -223,24 +220,24 @@ template <int Q, int B, int lgH> __global__ void sortTile(uint32_t* keys, int it
   }
 
   for(int q=0; q<Q; q++) {
-    if (gid * Q + q >= N) {break;}
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
 
     uint32_t elm = elements[q];
-    keys[gid * Q + q] = elm;
+    keys[(blockIdx.x * Q * B) + threadIdx.x * Q + q] = elm;
   }
 }
 
 template <int Q, int B, int lgH> __global__ void scatter(uint32_t* keys, uint32_t* histograms, uint32_t* histograms_tst, int ith_pass, int N){
-  uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-
   __shared__ uint32_t shmem[Q*B];
   __shared__ uint32_t histo_tst[B];
   __shared__ uint32_t histo_org[B];
   __shared__ uint32_t histo_scn_exc[B];
   __shared__ uint32_t histo_scn_inc[B];
 
-  histo_org[threadIdx.x] = histograms[gid];
-  histo_tst[threadIdx.x] = histograms_tst[gid];
+  uint32_t hist_index = blockIdx.x * 256 + threadIdx.x;
+
+  histo_org[threadIdx.x] = histograms[hist_index];
+  histo_tst[threadIdx.x] = histograms_tst[hist_index];
   __syncthreads();
 
   uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_org, threadIdx.x);
@@ -251,14 +248,14 @@ template <int Q, int B, int lgH> __global__ void scatter(uint32_t* keys, uint32_
   __syncthreads();
 
   // restore histo_org because scanIncBlock scans in-place
-  histo_org[threadIdx.x] = histograms[gid];
+  histo_org[threadIdx.x] = histograms[hist_index];
   __syncthreads();
 
   uint32_t block_offset = blockIdx.x * Q * B;
   uint32_t thread_offset = threadIdx.x * Q;
   // Copy from global to shared
   for (int i = 0; i < Q; i++) {
-    if (gid * Q + i >= N) {break;}
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + i >= N) {break;}
     shmem[threadIdx.x * Q + i] = keys[block_offset + thread_offset + i];
   }
   __syncthreads();
@@ -266,12 +263,12 @@ template <int Q, int B, int lgH> __global__ void scatter(uint32_t* keys, uint32_
   uint32_t elements[Q];
   // Copy from shared to register
   for (int q = 0; q < Q; q++){
-    if (gid * Q + q >= N) {break;}
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
     elements[q] = shmem[threadIdx.x * Q + q];
   }
 
   for(int q=0; q<Q; q++) {
-    if (gid * Q + q >= N) {break;}
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
     uint32_t elm = elements[q];
     uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF;
     // TODO: Unsure about this

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S nix shell nixpkgs#sshpass --command bash
 
-rsync -ae 'ssh -F ../PMPH/config' ./cub-code-radixsort hendrix:
-ssh -F ../PMPH/config hendrix "pushd cub-code-radixsort && make"
+rsync -ae 'sshpass -f /home/maroka/hendrix_pass ssh -F ../PMPH/config' ./cub-code-radixsort hendrix:
+sshpass -f /home/maroka/hendrix_pass ssh -F ../PMPH/config hendrix "pushd cub-code-radixsort && make"

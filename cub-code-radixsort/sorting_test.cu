@@ -9,7 +9,7 @@ int validateZ(u_int32_t* A, uint32_t sizeAB) {
     for(uint32_t i = 1; i < sizeAB; i++) {
 
       if (A[i-1] > A[i]){
-        // printf("INVALID RESULT for i:%d, (A[i-1]=%d > A[i]=%d)\n", i, A[i-1], A[i]);
+        printf("INVALID RESULT for i:%d, (A[i-1]=%d > A[i]=%d)\n", i, A[i-1], A[i]);
         wrongCounter++;
       }
     }
@@ -18,7 +18,7 @@ int validateZ(u_int32_t* A, uint32_t sizeAB) {
 
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
-        uint32_t r = rand();
+        uint32_t r = rand() % 256;
         data[i] = r;
     }
 }
@@ -317,15 +317,15 @@ int main (int argc, char * argv[]) {
         exit(1);
     }
 
-    // const uint32_t N = atoi(argv[1]);
-    const uint32_t N = 16 * 3 + 1;
+    const uint32_t N = atoi(argv[1]);
+    //const uint32_t N = 16 * 3 * 2;
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
-    //uint32_t *h_keys = (uint32_t*) malloc(N*sizeof(uint32_t));//{2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
-    uint32_t h_keys[49] = { 48, 1, 33, 17, 25, 9, 41, 5, 29, 13, 37, 21, 45, 3, 35, 19, 27, 11, 43, 7, 31, 15, 39, 23, 47, 0, 34, 18, 26, 10, 42, 6, 30, 14, 38, 22, 46, 2, 36, 20, 28, 12, 44, 8, 32, 16, 40, 24, 4 };
+    uint32_t *h_keys = (uint32_t*) malloc(N*sizeof(uint32_t));//{2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
+    //uint32_t h_keys[49] = { 48, 1, 33, 17, 25, 9, 41, 5, 29, 13, 37, 21, 45, 3, 35, 19, 27, 11, 43, 7, 31, 15, 39, 23, 47, 0, 34, 18, 26, 10, 42, 6, 30, 14, 38, 22, 46, 2, 36, 20, 28, 12, 44, 8, 32, 16, 40, 24, 4 };
     uint32_t *h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
-    //randomInitNat(h_keys, N, N/10);
+    randomInitNat(h_keys, N, N/10);
 
     //Allocate and Initialize Device data
     uint32_t* d_keys_in;
@@ -345,11 +345,6 @@ int main (int argc, char * argv[]) {
     cudaDeviceSynchronize();
     cudaCheckError();
 
-
-    // int wrongCounter = validateZ(h_keys_res, N);
-    // printf("wrongCounter: %u\n", wrongCounter);
-    // bool success = wrongCounter == 0;
-
     printf("Original keys:\n");
     for (uint32_t i = 0; i < N; i++) {
         printf("%u ", h_keys[i]);
@@ -361,6 +356,10 @@ int main (int argc, char * argv[]) {
         printf("%u ", h_keys_res[i]);
     }
     printf("\n");
+
+    int wrongCounter = validateZ(h_keys_res, N);
+    printf("wrongCounter: %u\n", wrongCounter);
+    bool success = wrongCounter == 0;
 
     //uint32_t* h_keys_res2  = (uint32_t*) malloc(N*sizeof(uint32_t));
     //std::memcpy(h_keys_res2, h_keys_res, sizeof(h_keys_res))
@@ -380,5 +379,5 @@ int main (int argc, char * argv[]) {
     //free(h_keys);
     free(h_keys_res);
 
-    //return success ? 0 : 1;
+    return success ? 0 : 1;
 }

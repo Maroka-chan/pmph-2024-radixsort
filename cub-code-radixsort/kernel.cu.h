@@ -315,8 +315,8 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
 
   // Copy from global to shared
   for (int i = 0; i < Q; i++) {
-    if ((blockIdx.x * Q * B) + threadIdx.x * Q + i >= N) {break;}
     uint32_t loc_pos = i*blockDim.x + threadIdx.x;
+    if (blockIdx.x * Q * B + loc_pos >= N) {break;}
     shmem[loc_pos] = keys[blockIdx.x * Q * B + loc_pos];
   }
   __syncthreads();
@@ -333,8 +333,8 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
   uint32_t elements[Q];
   // Copy from shared to register
   for (int q = 0; q < Q; q++){
-    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
     uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    if (blockIdx.x * Q * B + loc_pos >= N) {break;}
     elements[q] = shmem[loc_pos];
   }
 
@@ -346,11 +346,11 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
   __syncthreads();
 
   for(int q=0; q<Q; q++) {
-    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
     uint32_t elm = elements[q];
     uint8_t bin = (elm >> (ith_pass * lgH)) & 0x0F; // TODO: CHANGE BACK to 0xFF
     // TODO: Unsure about this
     uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    if (blockIdx.x * Q * B + loc_pos >= N) {break;}
     // uint32_t loc_pos = gid * Q + q;
     uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
     if(glb_pos < N) {

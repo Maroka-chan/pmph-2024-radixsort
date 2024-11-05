@@ -19,7 +19,7 @@ template  <int B, int H, int lgH> __global__ void histogramKernel(uint32_t *d_ke
     if (gid * Q + i >= num_items) {return;}
     uint32_t block_offset = blockIdx.x * Q * B;
     uint32_t thread_offset = threadIdx.x * Q;
-    uint8_t pass = (d_keys_in[block_offset + thread_offset + i] >> (ith_pass * lgH)) & 0xF; // TODO: CHANGE BACK to 0xFF
+    uint8_t pass = (d_keys_in[block_offset + thread_offset + i] >> (ith_pass * lgH)) & 0xFF; // TODO: CHANGE BACK to 0xFF
 
     uint32_t element = d_keys_in[block_offset + thread_offset + i];
 
@@ -215,13 +215,13 @@ template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, in
   }
 }
 
-template <int Q, int B, int lgH> __global__ void sortTile(uint32_t* keys, int ith_pass, int N){
+template <int Q, int B, int lgH> __global__ void sortTile(uint32_t *keys_in, uint32_t *keys_out, int ith_pass, int N){
   __shared__ uint32_t result[Q*B];
 
   uint32_t elements[Q];
   for (int q = 0; q < Q; q++){
     if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
-    elements[q] = keys[(blockIdx.x * Q * B) + threadIdx.x * Q + q];
+    elements[q] = keys_in[(blockIdx.x * Q * B) + threadIdx.x * Q + q];
   }
 
   for (int bit = 0; bit < lgH; bit++){
@@ -237,12 +237,11 @@ template <int Q, int B, int lgH> __global__ void sortTile(uint32_t* keys, int it
     if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
 
     uint32_t elm = elements[q];
-    keys[(blockIdx.x * Q * B) + threadIdx.x * Q + q] = elm;
+    keys_out[(blockIdx.x * Q * B) + threadIdx.x * Q + q] = elm;
   }
 }
 
-template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, uint32_t* histograms, uint32_t* histograms_tst, int ith_pass, int N){
-  __shared__ uint32_t shmem[Q*B];
+template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t *keys, uint32_t *keys_out, uint32_t *histograms, uint32_t* histograms_tst, int ith_pass, int N){
   __shared__ uint32_t histo_tst[H];
   __shared__ uint32_t histo_org[H];
   __shared__ uint32_t histo_scn_exc[H];
@@ -264,34 +263,14 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
   histo_org[threadIdx.x] = histograms[hist_index];
   __syncthreads();
 
-  // Copy from global to shared
-  for (int i = 0; i < Q; i++) {
-    uint32_t loc_pos = i*blockDim.x + threadIdx.x;
-    if (blockIdx.x * Q * B + loc_pos >= N) {break;}
-    shmem[loc_pos] = keys[blockIdx.x * Q * B + loc_pos];
-  }
-  __syncthreads();
-
-  uint32_t elements[Q];
-  // Copy from shared to register
-  for (int q = 0; q < Q; q++){
-    uint32_t loc_pos = q*blockDim.x + threadIdx.x;
-    if (blockIdx.x * Q * B + loc_pos >= N) {break;}
-    elements[q] = shmem[loc_pos];
-  }
-
-  for (int q = 0; q < Q; q++) {
-    printf("\n");  // DO NOT REMOVE!! Needed for synchronization or flushing or caching or something ¯\_(ツ)_/¯
-  }
-
   for(int q=0; q<Q; q++) {
-    uint32_t elm = elements[q];
-    uint8_t bin = (elm >> (ith_pass * lgH)) & 0x0F; // TODO: CHANGE BACK to 0xFF
     uint32_t loc_pos = q*blockDim.x + threadIdx.x;
+    uint32_t elm = keys[blockIdx.x * Q * B + loc_pos];
+    uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF; // TODO: CHANGE BACK to 0xFF
     if (blockIdx.x * Q * B + loc_pos >= N) {break;}
     uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
     if(glb_pos < N) {
-      keys[glb_pos] = elm;
+      keys_out[glb_pos] = elm;
     }
   }
 }

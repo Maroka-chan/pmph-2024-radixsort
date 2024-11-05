@@ -19,7 +19,7 @@ int validateZ(u_int32_t* A, uint32_t sizeAB) {
 
 void randomInitNat(uint32_t* data, const uint32_t size, const uint32_t H) {
     for (int i = 0; i < size; ++i) {
-        uint32_t r = rand() % 256;
+        uint32_t r = rand();
         data[i] = r;
     }
 }
@@ -81,16 +81,16 @@ double sortRedByKeyCUB( uint32_t* data_keys_in
 void radixSortKeys(
     void* d_temp_storage,
     size_t& temp_storage_bytes,
-    u_int32_t* d_keys_in,
-    u_int32_t* d_keys_out,
-    u_int64_t num_items,
+    uint32_t* d_keys_in,
+    uint32_t* d_keys_out,
+    uint64_t num_items,
     int begin_bit,
     int end_bit
 ) {
-    const int B = 16; // CUDA block size
-    const int Q = 3; // elements processed by each thread
-    const int lgH = 4; // bits sorted at a time
-    const int H = 16; // Histogram size
+    const int B = 256; // CUDA block size
+    const int Q = 22; // elements processed by each thread
+    const int lgH = 8; // bits sorted at a time
+    const int H = 256; // Histogram size
 
     int numBlocks = (num_items + B * Q - 1) / (B * Q);
     // printf("numBlocks: %u\n", numBlocks);
@@ -103,17 +103,23 @@ void radixSortKeys(
     cudaSucceeded(cudaMalloc((void**) &transpose_res, numBlocks * H * sizeof(uint32_t)));
     uint32_t *final_transpose_res;
     cudaSucceeded(cudaMalloc((void**) &final_transpose_res, numBlocks * H * sizeof(uint32_t)));
-
-    cudaMemcpy(d_keys_out, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToDevice);
     cudaDeviceSynchronize();
 
-    for (int i = 0; i < 2; i++) {
+    // cudaMemcpy(d_keys_out, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToDevice);
+    // cudaDeviceSynchronize();
+
+    uint32_t *temp;
+    for (int i = 0; i < 4; i++) {
         cudaSucceeded(cudaMemset(histogram, 0, numBlocks * H * sizeof(uint32_t)));
 
         // Step 1. (Also writes back to global memory)
-        sortTile<Q,B,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_out, i, num_items);
+        sortTile<Q,B,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_in, d_keys_out, i, num_items);
         cudaDeviceSynchronize();
 
+        // Swap pointers
+        temp = d_keys_in;
+        d_keys_in = d_keys_out;
+        d_keys_out = temp;
 
         // printf("d_keys_out:\n");
         // for (uint64_t i = 0; i < num_items; ++i) {
@@ -124,7 +130,7 @@ void radixSortKeys(
         // free(d_keys_out_host);
 
         // Step 2.
-        histogramKernel<B, H, lgH><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, Q, i, num_items);
+        histogramKernel<B, H, lgH><<<numBlocks, threadsPerBlock>>>(d_keys_in, histogram, Q, i, num_items);
         cudaDeviceSynchronize();
 
         // Step 3. transpose -> scan -> transpose
@@ -209,8 +215,13 @@ void radixSortKeys(
         // }
 
         // Step 4. Scatter sorted tiles to global positions
-        scatter<Q,B,H,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, final_transpose_res, i, num_items);
+        scatter<Q,B,H,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_in, d_keys_out, histogram, final_transpose_res, i, num_items);
         cudaDeviceSynchronize();
+
+        // Swap pointers
+        temp = d_keys_in;
+        d_keys_in = d_keys_out;
+        d_keys_out = temp;
 
         // uint32_t* d_keys_out_host = (uint32_t*) malloc(num_items * sizeof(uint32_t));
         // cudaMemcpy(d_keys_out_host, d_keys_out, num_items * sizeof(uint32_t), cudaMemcpyDeviceToHost);
@@ -224,6 +235,8 @@ void radixSortKeys(
 
         // free(d_keys_out_host);
     }
+
+    //cudaMemcpy(d_keys_out, d_keys_in, num_items * sizeof(uint32_t), cudaMemcpyDeviceToDevice);
 
     // cudaMemcpy(histogram_res, final_transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     // cudaDeviceSynchronize();
@@ -353,23 +366,27 @@ int main (int argc, char * argv[]) {
         elapsed = sortRedByKeyCUB( d_keys_in, d_keys_out, N );
     } else {
         elapsed = radixSortBench( d_keys_in, d_keys_out, N );
+        // Swap pointers
+        uint32_t *temp = d_keys_in;
+        d_keys_in = d_keys_out;
+        d_keys_out = temp;
     }
 
     cudaMemcpy(h_keys_res, d_keys_out, N*sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
     cudaCheckError();
 
-    printf("Original keys sorted:\n");
-    for (uint32_t i = 0; i < N; i++) {
-        printf("%u ", h_keys_copy[i]);
-    }
-    printf("\n");
+    // printf("Original keys sorted:\n");
+    // for (uint32_t i = 0; i < N; i++) {
+    //     printf("%u ", h_keys_copy[i]);
+    // }
+    // printf("\n");
 
-    printf("Final Sorted keys:\n");
-    for (uint32_t i = 0; i < N; i++) {
-        printf("%u ", h_keys_res[i]);
-    }
-    printf("\n");
+    // printf("Final Sorted keys:\n");
+    // for (uint32_t i = 0; i < N; i++) {
+    //     printf("%u ", h_keys_res[i]);
+    // }
+    // printf("\n");
 
 
 

@@ -7,14 +7,6 @@ template  <int B, int H, int lgH> __global__ void histogramKernel(uint32_t *d_ke
   uint32_t block_offset = blockIdx.x * Q * B;
   uint32_t thread_offset = threadIdx.x * Q;
 
-  // if (blockIdx.x == 1 && threadIdx.x == 0) {
-  //   printf("d_keys_in: ");
-  //   for (uint32_t i = 0; i < Q; i++) {
-  //     printf("%u ", d_keys_in[block_offset + thread_offset + i]);
-  //   }
-  //   printf("\n");
-  // }
-
   for (uint32_t i = 0; i < Q; i++) {
     if (gid * Q + i >= num_items) {return;}
     uint32_t block_offset = blockIdx.x * Q * B;
@@ -22,10 +14,6 @@ template  <int B, int H, int lgH> __global__ void histogramKernel(uint32_t *d_ke
     uint8_t pass = (d_keys_in[block_offset + thread_offset + i] >> (ith_pass * lgH)) & 0xFF; // TODO: CHANGE BACK to 0xFF
 
     uint32_t element = d_keys_in[block_offset + thread_offset + i];
-
-    // if (blockIdx.x == 1 && threadIdx.x == 0) {
-    //   printf("element: %u\n", element);
-    // }
 
     uint32_t hist_block_offset = blockIdx.x * H;
     atomicAdd(&histogram[hist_block_offset + pass], 1);
@@ -253,20 +241,18 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t *keys, 
   __syncthreads();
 
   uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_org, threadIdx.x);
+  // restore histo_org because scanIncBlock scans in-place
+  histo_org[threadIdx.x] = histograms[hist_index];
   __syncthreads();
   histo_scn_exc[threadIdx.x] = scanRes;
   __syncthreads();
   histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_exc[threadIdx.x-1];
   __syncthreads();
 
-  // restore histo_org because scanIncBlock scans in-place
-  histo_org[threadIdx.x] = histograms[hist_index];
-  __syncthreads();
-
   for(int q=0; q<Q; q++) {
     uint32_t loc_pos = q*blockDim.x + threadIdx.x;
     uint32_t elm = keys[blockIdx.x * Q * B + loc_pos];
-    uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF; // TODO: CHANGE BACK to 0xFF
+    uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF;
     if (blockIdx.x * Q * B + loc_pos >= N) {break;}
     uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
     if(glb_pos < N) {

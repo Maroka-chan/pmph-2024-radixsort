@@ -132,7 +132,7 @@ void radixSortKeys(
         int dimx = (H + TILE - 1) / TILE;
         dim3 block(TILE, TILE, 1), grid(dimx, dimy, 1);
 
-        if (i == 0) {
+        if (i == 1) {
             uint32_t *histogram_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
             cudaMemcpy(histogram_host, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
             cudaDeviceSynchronize();
@@ -151,7 +151,7 @@ void radixSortKeys(
         transposeKernel<TILE><<<grid, block>>>(histogram, transpose_res, H, numBlocks);
         cudaDeviceSynchronize();
 
-        if (i == 0) {
+        if (i == 1) {
             uint32_t *transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
             cudaMemcpy(transpose_res_host, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
             cudaDeviceSynchronize();
@@ -170,7 +170,7 @@ void radixSortKeys(
         scanKernel<<<numBlocks, threadsPerBlock>>>(transpose_res, H, numBlocks);
         cudaDeviceSynchronize();
 
-        if (i == 0) {
+        if (i == 1) {
             uint32_t *transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
             cudaMemcpy(transpose_res_host, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
             cudaDeviceSynchronize();
@@ -191,7 +191,7 @@ void radixSortKeys(
         transposeKernel<TILE><<<grid2, block2>>>(transpose_res, final_transpose_res, numBlocks, H);
         cudaDeviceSynchronize();
 
-        if (i == 0) {
+        if (i == 1) {
             uint32_t *final_transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
             cudaMemcpy(final_transpose_res_host, final_transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
             cudaDeviceSynchronize();
@@ -323,17 +323,7 @@ int main (int argc, char * argv[]) {
 
     //Allocate and Initialize Host data with random values
     //uint32_t *h_keys = (uint32_t*) malloc(N*sizeof(uint32_t));//{2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
-    uint32_t h_keys[49] = 
-    {1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1, 5, 9, 1};
-    // for (int i = 0; i < 256; ++i) {
-    //     h_keys[i] = 78;
-    // }
-    // for (int i = 256; i < 512; ++i) {
-    //     h_keys[i] = 43;
-    // }
-    // for (int i = 512; i < 769; ++i) {
-    //     h_keys[i] = 2;
-    // }
+    uint32_t h_keys[49] = { 48, 1, 33, 17, 25, 9, 41, 5, 29, 13, 37, 21, 45, 3, 35, 19, 27, 11, 43, 7, 31, 15, 39, 23, 47, 0, 34, 18, 26, 10, 42, 6, 30, 14, 38, 22, 46, 2, 36, 20, 28, 12, 44, 8, 32, 16, 40, 24, 4 };
     uint32_t *h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
     //randomInitNat(h_keys, N, N/10);
 

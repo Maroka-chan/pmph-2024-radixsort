@@ -317,7 +317,7 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
   for (int i = 0; i < Q; i++) {
     if ((blockIdx.x * Q * B) + threadIdx.x * Q + i >= N) {break;}
     uint32_t loc_pos = i*blockDim.x + threadIdx.x;
-    shmem[loc_pos] = keys[loc_pos];
+    shmem[loc_pos] = keys[blockIdx.x * Q * B + loc_pos];
   }
   __syncthreads();
 

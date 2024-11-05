@@ -1,7 +1,7 @@
 #define lgWARP      5
 #define WARP        (1<<lgWARP)
 
-template  <int B, int H> __global__ void histogramKernel(uint32_t *d_keys_in, uint32_t *histogram, int Q, int ith_pass, uint32_t num_items) {
+template  <int B, int H, int lgH> __global__ void histogramKernel(uint32_t *d_keys_in, uint32_t *histogram, int Q, int ith_pass, uint32_t num_items) {
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   uint32_t block_offset = blockIdx.x * Q * B;
@@ -19,7 +19,7 @@ template  <int B, int H> __global__ void histogramKernel(uint32_t *d_keys_in, ui
     if (gid * Q + i >= num_items) {return;}
     uint32_t block_offset = blockIdx.x * Q * B;
     uint32_t thread_offset = threadIdx.x * Q;
-    uint8_t pass = (d_keys_in[block_offset + thread_offset + i] >> (ith_pass * 8)) & 0xFF;
+    uint8_t pass = (d_keys_in[block_offset + thread_offset + i] >> (ith_pass * lgH)) & 0xF; // TODO: CHANGE BACK to 0xFF
 
     uint32_t element = d_keys_in[block_offset + thread_offset + i];
 
@@ -257,7 +257,7 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
   __shared__ uint32_t histo_scn_exc[H];
   __shared__ uint32_t histo_scn_inc[H];
 
-  uint32_t hist_index = blockIdx.x * 256 + threadIdx.x;
+  uint32_t hist_index = blockIdx.x * H + threadIdx.x;
 
   histo_org[threadIdx.x] = histograms[hist_index];
   histo_tst[threadIdx.x] = histograms_tst[hist_index];
@@ -313,13 +313,11 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
   // }
   // __syncthreads();
 
-  uint32_t block_offset = blockIdx.x * Q * B;
-  uint32_t thread_offset = threadIdx.x * Q;
   // Copy from global to shared
   for (int i = 0; i < Q; i++) {
     if ((blockIdx.x * Q * B) + threadIdx.x * Q + i >= N) {break;}
     uint32_t loc_pos = i*blockDim.x + threadIdx.x;
-    shmem[loc_pos] = keys[block_offset + thread_offset + i];
+    shmem[loc_pos] = keys[loc_pos];
   }
   __syncthreads();
 
@@ -340,27 +338,25 @@ template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t* keys, 
     elements[q] = shmem[loc_pos];
   }
 
-  // if (blockIdx.x == 0 && threadIdx.x == 0) {
-  //   printf("elements: ");
-  //   for (int i = 0; i < Q; i++) {
-  //     printf("%u ", elements[i]);
-  //   }
-  //   printf("\n");
-  // }
-  // __syncthreads();
+
+  for (int q = 0; q < Q; q++) {
+    if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
+    printf("Iteration: %u, Block: %u, Thread %u: Element %u: %u\n", q, blockIdx.x, threadIdx.x, q, elements[q]);
+  }
+  __syncthreads();
 
   for(int q=0; q<Q; q++) {
     if ((blockIdx.x * Q * B) + threadIdx.x * Q + q >= N) {break;}
     uint32_t elm = elements[q];
-    uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF;
+    uint8_t bin = (elm >> (ith_pass * lgH)) & 0x0F; // TODO: CHANGE BACK to 0xFF
     // TODO: Unsure about this
     uint32_t loc_pos = q*blockDim.x + threadIdx.x;
     // uint32_t loc_pos = gid * Q + q;
     uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
     if(glb_pos < N) {
-      //printf("blockIdx.x: %u, threadIdx.x: %u, elm: %u, bin: %u -> %u - %u + %u - %u = %u\n", blockIdx.x, threadIdx.x, elm, bin, histo_tst[bin], histo_org[bin], loc_pos, histo_scn_exc[bin], glb_pos);
+      printf("blockIdx.x: %u, threadIdx.x: %u, elm: %u, bin: %u -> %u - %u + %u - %u = %u\n", blockIdx.x, threadIdx.x, elm, bin, histo_tst[bin], histo_org[bin], loc_pos, histo_scn_exc[bin], glb_pos);
       keys[glb_pos] = elm;
-    } 
+    }
   }
 
   __syncthreads();

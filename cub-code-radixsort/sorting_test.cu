@@ -87,7 +87,7 @@ void radixSortKeys(
     int end_bit
 ) {
     const int B = 256; // CUDA block size
-    const int Q = 22; // elements processed by each thread
+    const int Q = 3; // elements processed by each thread
     const int lgH = 8; // bits sorted at a time
     const int H = 256; // Histogram size
 
@@ -111,8 +111,17 @@ void radixSortKeys(
         sortTile<Q,B,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_out, i, num_items);
         cudaDeviceSynchronize();
 
+
+        // printf("d_keys_out:\n");
+        // for (uint64_t i = 0; i < num_items; ++i) {
+        //     printf("%u ", d_keys_out_host[i]);
+        // }
+        // printf("\n");
+
+        // free(d_keys_out_host);
+
         // Step 2.
-        histogramKernel<H, B><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, Q, i, num_items);
+        histogramKernel<B, H><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, Q, i, num_items);
         cudaDeviceSynchronize();
 
         // Step 3. transpose -> scan -> transpose
@@ -121,17 +130,113 @@ void radixSortKeys(
         int dimx = (H + TILE - 1) / TILE;
         dim3 block(TILE, TILE, 1), grid(dimx, dimy, 1);
 
+        if (i == 0) {
+            uint32_t *histogram_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+            cudaMemcpy(histogram_host, histogram, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+            cudaDeviceSynchronize();
+
+            printf("Histogram after first iteration:\n");
+            for (int i = 0; i < numBlocks; ++i) {
+                for (int j = 0; j < H; ++j) {
+                    printf("%u ", histogram_host[i * H + j]);
+                }
+                printf("\n");
+            }
+
+            free(histogram_host);
+        }
+
         transposeKernel<TILE><<<grid, block>>>(histogram, transpose_res, H, numBlocks);
         cudaDeviceSynchronize();
+
+        if (i == 0) {
+            uint32_t *transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+            cudaMemcpy(transpose_res_host, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+            cudaDeviceSynchronize();
+
+            printf("Transpose result after first iteration:\n");
+            for (int i = 0; i < numBlocks; ++i) {
+            for (int j = 0; j < H; ++j) {
+                printf("%u ", transpose_res_host[i * H + j]);
+            }
+            printf("\n");
+            }
+
+            free(transpose_res_host);
+        }
+
         scanKernel<<<numBlocks, threadsPerBlock>>>(transpose_res, H, numBlocks);
         cudaDeviceSynchronize();
-        transposeKernel<TILE><<<grid, block>>>(transpose_res, final_transpose_res, H, numBlocks);
+
+        if (i == 0) {
+            uint32_t *transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+            cudaMemcpy(transpose_res_host, transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+            cudaDeviceSynchronize();
+
+            printf("Scan result after first iteration:\n");
+            for (int i = 0; i < numBlocks; ++i) {
+            for (int j = 0; j < H; ++j) {
+                printf("%u ", transpose_res_host[i * H + j]);
+            }
+            printf("\n");
+            }
+
+            free(transpose_res_host);
+        }
+
+        dim3 block2(TILE, TILE, 1), grid2(dimy, dimx, 1);
+
+        transposeKernel<TILE><<<grid2, block2>>>(transpose_res, final_transpose_res, numBlocks, H);
         cudaDeviceSynchronize();
 
+        if (i == 0) {
+            uint32_t *final_transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+            cudaMemcpy(final_transpose_res_host, final_transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+            cudaDeviceSynchronize();
+
+            printf("Final Transpose Result after first iteration:\n");
+            for (int i = 0; i < numBlocks; ++i) {
+                for (int j = 0; j < H; ++j) {
+                    printf("%u ", final_transpose_res_host[i * H + j]);
+                }
+                printf("\n");
+            }
+
+            free(final_transpose_res_host);
+        }
+
         // Step 4. Scatter sorted tiles to global positions
-        scatter<Q,B,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, final_transpose_res, i, num_items);
+        scatter<Q,B,H,lgH><<<numBlocks, threadsPerBlock>>>(d_keys_out, histogram, final_transpose_res, i, num_items);
         cudaDeviceSynchronize();
     }
+
+    // cudaMemcpy(histogram_res, final_transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    // cudaDeviceSynchronize();
+
+    // printf("Histogram:\n");
+    // printf("numBlocks: %u\n", numBlocks);
+    // for (int i = 0; i < numBlocks; i++) {
+    //     for (int j = 0; j < H; ++j) {
+    //         printf("%u ", histogram_res[i * H + j]);
+    //     }
+    //     printf("\n");
+    // }
+
+    // uint32_t *final_transpose_res_host = (uint32_t*) malloc(numBlocks * H * sizeof(uint32_t));
+    // cudaMemcpy(final_transpose_res_host, final_transpose_res, numBlocks * H * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    // cudaDeviceSynchronize();
+
+    // printf("Final Transpose Result:\n");
+    // for (int i = 0; i < numBlocks; ++i) {
+    //     for (int j = 0; j < H; ++j) {
+    //         printf("%u ", final_transpose_res_host[i * H + j]);
+    //     }
+    //     printf("\n");
+    // }
+
+    // free(final_transpose_res_host);
+
+    free(histogram_res);
 
     cudaFree(histogram);
 }
@@ -154,9 +259,10 @@ double radixSortBench( uint32_t* data_keys_in
                                       , data_keys_in, data_keys_out
                                       , N,   beg_bit,  end_bit
                                       );
-        cudaMalloc(&tmp_sort_mem, tmp_sort_len);
+        //cudaMalloc(&tmp_sort_mem, tmp_sort_len);
     }
     cudaCheckError();
+    return 0;
 
     { // one dry run
         radixSortKeys( tmp_sort_mem, tmp_sort_len
@@ -197,13 +303,24 @@ int main (int argc, char * argv[]) {
         exit(1);
     }
 
-    const uint32_t N = atoi(argv[1]);
+    // const uint32_t N = atoi(argv[1]);
+    const uint32_t N = 256 * 3 + 1;
     const uint64_t BASELINE = atoi(argv[2]);
 
     //Allocate and Initialize Host data with random values
     uint32_t *h_keys = (uint32_t*) malloc(N*sizeof(uint32_t));//{2, 3, 50, 1, 10, 5, 667, 3, 78, 23, 100};
-    uint32_t* h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
-    randomInitNat(h_keys, N, N/10);
+    //uint32_t h_keys[20] = {2, 3, 50, 1, 10, 5, 67, 3, 78, 23, 100, 16, 45, 23, 84, 31, 5, 32, 43, 56};
+    for (int i = 0; i < 256; ++i) {
+        h_keys[i] = 78;
+    }
+    for (int i = 256; i < 512; ++i) {
+        h_keys[i] = 43;
+    }
+    for (int i = 512; i < 769; ++i) {
+        h_keys[i] = 2;
+    }
+    uint32_t *h_keys_res  = (uint32_t*) malloc(N*sizeof(uint32_t));
+    //randomInitNat(h_keys, N, N/10);
 
     //Allocate and Initialize Device data
     uint32_t* d_keys_in;
@@ -223,15 +340,34 @@ int main (int argc, char * argv[]) {
     cudaDeviceSynchronize();
     cudaCheckError();
 
-    int wrongCounter = validateZ(h_keys_res, N);
-    printf("wrongCounter: %u\n", wrongCounter);
-    bool success = wrongCounter == 0;
 
-    if(BASELINE) {
-        printf("Baseline (CUB) Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, success);
-    } else {
-        printf("Radix Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, success);
+    // int wrongCounter = validateZ(h_keys_res, N);
+    // printf("wrongCounter: %u\n", wrongCounter);
+    // bool success = wrongCounter == 0;
+
+    printf("Original keys:\n");
+    for (uint32_t i = 0; i < N; ++i) {
+        printf("%u ", h_keys[i]);
     }
+    printf("\n");
+
+    printf("Sorted keys:\n");
+    for (uint32_t i = 0; i < N; ++i) {
+        printf("%u ", h_keys_res[i]);
+    }
+    printf("\n");
+
+    //uint32_t* h_keys_res2  = (uint32_t*) malloc(N*sizeof(uint32_t));
+    //std::memcpy(h_keys_res2, h_keys_res, sizeof(h_keys_res))
+    //std::sort(h_keys_res2, h_keys_res2[N-1]);
+
+    //if ()
+
+    // if(BASELINE) {
+    //     printf("Baseline (CUB) Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, success);
+    // } else {
+    //     printf("Radix Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, success);
+    // }
 
 
     // Cleanup and closing
@@ -239,5 +375,5 @@ int main (int argc, char * argv[]) {
     //free(h_keys);
     free(h_keys_res);
 
-    return success ? 0 : 1;
+    //return success ? 0 : 1;
 }

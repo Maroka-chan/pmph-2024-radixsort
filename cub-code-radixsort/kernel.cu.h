@@ -230,33 +230,45 @@ template <int Q, int B, int lgH> __global__ void sortTile(uint32_t *keys_in, uin
 }
 
 template <int Q, int B, int H, int lgH> __global__ void scatter(uint32_t *keys, uint32_t *keys_out, uint32_t *histograms, uint32_t* histograms_tst, int ith_pass, int N){
-  __shared__ uint32_t histo_tst[H];
-  __shared__ uint32_t histo_org[H];
-  __shared__ uint32_t histo_scn_exc[H];
+  // use only H elements of shared mem and reuse it for both arrays
+  __shared__ uint32_t shmem[H];
+  uint32_t *histo_scn_inc = shmem;
+  uint32_t *histo_tst_minus_org_minus_scn_exc = shmem;
 
-  uint32_t hist_index = blockIdx.x * H + threadIdx.x;
-
-  histo_org[threadIdx.x] = histograms[hist_index];
-  histo_tst[threadIdx.x] = histograms_tst[hist_index];
+  uint32_t hist_index        = blockIdx.x * H + threadIdx.x;
+  uint32_t histo_org         = histograms[hist_index];
+  histo_scn_inc[threadIdx.x] = histo_org;
   __syncthreads();
 
-  uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_org, threadIdx.x);
-  // restore histo_org because scanIncBlock scans in-place
-  histo_org[threadIdx.x] = histograms[hist_index];
-  __syncthreads();
-  histo_scn_exc[threadIdx.x] = scanRes;
-  __syncthreads();
-  histo_scn_exc[threadIdx.x] = (threadIdx.x == 0) ? 0 : histo_scn_exc[threadIdx.x-1];
+  uint32_t scanRes = scanIncBlock<Add<uint32_t>>(histo_scn_inc, threadIdx.x);
   __syncthreads();
 
-  for(int q=0; q<Q; q++) {
-    uint32_t loc_pos = q*blockDim.x + threadIdx.x;
-    uint32_t elm = keys[blockIdx.x * Q * B + loc_pos];
-    uint8_t bin = (elm >> (ith_pass * lgH)) & 0xFF;
-    if (blockIdx.x * Q * B + loc_pos >= N) {break;}
-    uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_exc[bin];
-    if(glb_pos < N) {
-      keys_out[glb_pos] = elm;
+  histo_scn_inc[threadIdx.x] = scanRes;
+  __syncthreads();
+
+  uint32_t scanExcRes = threadIdx.x == 0 ? 0 : histo_scn_inc[threadIdx.x - 1];
+
+  histo_tst_minus_org_minus_scn_exc[threadIdx.x] =
+    histograms_tst[hist_index] - // corresponds to histo_tst[threadIdx.x];
+    histo_org -                  // corresponds to histo_org[threadIdx.x];
+    scanExcRes;                  // corresponds to histo_scn_exc[threadIdx.x];
+  __syncthreads();
+
+  uint32_t block_offset = blockIdx.x * Q * B;
+  #pragma unroll
+  for (int q = 0; q < Q; q++) {
+    uint32_t loc_pos = q * blockDim.x + threadIdx.x;
+
+    if (block_offset + loc_pos < N) {
+      uint32_t elm = keys[block_offset + loc_pos];
+      uint8_t  bin = (elm >> (ith_pass * lgH)) & 0xFF; // NOTE: changed back to 0xFF
+
+      // uint32_t glb_pos = histo_tst[bin] - histo_org[bin] + loc_pos - histo_scn_inc[bin];
+      uint32_t glb_pos = loc_pos + histo_tst_minus_org_minus_scn_exc[bin];
+      if (glb_pos < N) {
+        keys_out[glb_pos] = elm;
+      }
+
     }
   }
 }

@@ -158,7 +158,7 @@ double radixSortBench( uint32_t* data_keys_in
         //cudaMalloc(&tmp_sort_mem, tmp_sort_len);
     }
     cudaCheckError();
-    return 0;
+    //return 0;
 
     { // one dry run
         radixSortKeys( tmp_sort_mem, tmp_sort_len
@@ -248,6 +248,12 @@ int main (int argc, char * argv[]) {
         printf("The arrays are equal.\n");
     } else {
         printf("The arrays are not equal.\n");
+    }
+
+    if(BASELINE) {
+        printf("Baseline (CUB) Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, arraysEqual);
+    } else {
+        printf("Radix Sorting for N=%lu runs in: %.2f us, VALID: %d\n", N, elapsed, arraysEqual);
     }
 
     // Cleanup and closing

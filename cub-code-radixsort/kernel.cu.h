@@ -1,5 +1,4 @@
-#define lgWARP      5
-#define WARP        (1<<lgWARP)
+#include "pbb_kernels.cuh"
 
 template  <int B, int H, int lgH> __global__ void histogramKernel(uint32_t *d_keys_in, uint32_t *histogram, int Q, int ith_pass, uint32_t num_items) {
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -49,24 +48,6 @@ __global__ void scanKernel(uint32_t *histogram, int H, int numBlocks) {
 
 }
 
-// Taken from weekly 2
-template<class T>
-class Add {
-  public:
-    typedef T InpElTp;
-    typedef T RedElTp;
-    static const bool commutative = true;
-    static __device__ __host__ inline T identInp()                    { return (T)0;    }
-    static __device__ __host__ inline T mapFun(const T& el)           { return el;      }
-    static __device__ __host__ inline T identity()                    { return (T)0;    }
-    static __device__ __host__ inline T apply(const T t1, const T t2) { return t1 + t2; }
-
-    static __device__ __host__ inline bool equals(const T t1, const T t2) { return (t1 == t2); }
-    static __device__ __host__ inline T remVolatile(volatile T& t)    { T res = t; return res; }
-};
-
-
-
 __device__ u_int8_t isBitUnset(uint32_t num, int bit){
   return ((num >> bit) & 1 ) ^ 1;
 }
@@ -75,55 +56,6 @@ __device__ u_int8_t isBitSet(uint32_t num, int bit){
   return ((num >> bit) & 1 );
 }
 
-// Taken from weekly 2
-template<class OP>
-__device__ inline typename OP::RedElTp
-scanIncWarp( volatile typename OP::RedElTp* ptr, const unsigned int idx ) {
-    const unsigned int lane = idx & (WARP-1);
-
-    #pragma unroll
-    for (int d=0; d < lgWARP; d++){
-        int h = pow(2, d);
-        if (lane>=h) {
-            ptr[idx] = OP::apply(ptr[idx-h], ptr[idx]);
-        }
-    }
-    return OP::remVolatile(ptr[idx]);
-}
-
-// Taken from weekly 2
-template<class OP>
-__device__ inline typename OP::RedElTp
-scanIncBlock(volatile typename OP::RedElTp* ptr, const unsigned int idx) {
-    const unsigned int lane   = idx & (WARP-1);
-    const unsigned int warpid = idx >> lgWARP;
-
-    // 1. perform scan at warp level. `scanIncWarp` computes its result in-place
-    //    and also returns the per-thread result.
-    typename OP::RedElTp res = scanIncWarp<OP>(ptr,idx);
-    __syncthreads();
-
-    // 2. place the end-of-warp results in
-    //   the first warp. This works because
-    //   warp size = 32, and
-    //   max block size = 32^2 = 1024
-    typename OP::RedElTp temp;
-    if (lane == (WARP-1)) { temp = OP::remVolatile(ptr[idx]);}
-    __syncthreads();
-    if (lane == (WARP-1)) { ptr[warpid] = temp; }
-    __syncthreads();
-
-    // 3. scan again the first warp.
-    if (warpid == 0) scanIncWarp<OP>(ptr, idx);
-    __syncthreads();
-
-    // 4. accumulate results from previous step.
-    if (warpid > 0) {
-        res = OP::apply(ptr[warpid-1], res);
-    }
-
-    return res;
-}
 
 template <int Q, int B> __device__ void partition2(uint32_t vals[Q], int lgH, int outerLoopIndex, int bit, uint32_t final_res[Q*B], uint32_t num_items){
   __shared__ uint32_t isT[B];
